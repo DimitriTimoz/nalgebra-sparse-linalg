@@ -1,25 +1,41 @@
-/*
-Input: initial guess x(0) to the solution, (diagonal dominant) matrix A, right-hand side vector b, convergence criterion
-Output: solution when convergence is reached
-Comments: pseudocode based on the element-based formula above
+//! Jacobi iterative solver for sparse linear systems.
+//!
+//! This module provides an implementation of the Jacobi iterative method
+//! for solving linear systems of the form `Ax = b`, where `A` is a sparse matrix
+//! in CSR format. The Jacobi method is suitable for diagonally dominant matrices
+//! and is implemented generically for types that implement the required numeric traits.
 
-k = 0
-while convergence not reached do
-    for i := 1 step until n do
-        σ = 0
-        for j := 1 step until n do
-            if j ≠ i then
-                σ = σ + aij xj(k)
-            end
-        end
-        xi(k+1) = (bi − σ) / aii
-    end
-    increment k
-end
-*/
 use nalgebra_sparse::{na::{DVector, Scalar}, CsrMatrix};
 use num_traits::{Num, NumAssign, NumAssignOps, NumOps, Signed};
 
+/// Solves the linear system `Ax = b` using the Jacobi iterative method.
+///
+/// # Arguments
+///
+/// * `a` - A reference to a sparse matrix `A` in CSR format.
+/// * `b` - A reference to the right-hand side vector `b`.
+/// * `max_iter` - The maximum number of iterations to perform.
+///
+/// # Returns
+///
+/// Returns `Some(DVector<T>)` containing the solution vector if convergence is reached,
+/// or `None` if the method fails to converge or if the matrix is singular.
+///
+/// # Type Parameters
+///
+/// * `T` - The scalar type, which must implement the required numeric traits.
+///
+/// # Example
+///
+/// ```
+/// use nalgebra_sparse::{na::DVector, CsrMatrix};
+/// use nalgebra_sparse_linalg::iteratives::jacobi::solve;
+///
+/// let a = CsrMatrix::identity(3);
+/// let b = DVector::from_vec(vec![1.0; 3]);
+/// let result = solve(&a, &b, 100);
+/// assert!(result.is_some());
+/// ```
 pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize) -> Option<DVector<T>> 
 where 
     T: Scalar + Num + NumOps + NumAssign + NumAssignOps + Signed + Copy
