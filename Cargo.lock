@@ -75,6 +75,7 @@ name = "nalgebra-sparse-linalg"
 version = "0.1.0"
 dependencies = [
  "nalgebra-sparse",
+ "num-traits",
 ]
 
 [[package]]
