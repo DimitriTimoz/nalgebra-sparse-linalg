@@ -1,5 +1,8 @@
 [package]
 name = "nalgebra-sparse-linalg"
+description = "Sparse linear algebra library for Rust using nalgebra"
+authors = ["Dimitri Timoz <dimitri.timoz@protonmail.com>"]
+license = "MIT"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,4 +10,4 @@ edition = "2024"
 
 [dependencies]
 nalgebra-sparse = "0.10"
-num-traits = "0.2.19"
+num-traits = "0.2"
