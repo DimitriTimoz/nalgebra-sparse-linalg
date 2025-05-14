@@ -21,7 +21,6 @@ Add this to your `Cargo.toml`:
 [dependencies]
 nalgebra-sparse-linalg = "0.1"
 nalgebra-sparse = "0.9"
-nalgebra = "0.32"
 ```
 
 Example (Jacobi):
