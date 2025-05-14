@@ -1,5 +1,3 @@
-use std::{cmp, fmt::Display};
-
 /*
 Input: initial guess x(0) to the solution, (diagonal dominant) matrix A, right-hand side vector b, convergence criterion
 Output: solution when convergence is reached
@@ -24,7 +22,7 @@ use num_traits::{Num, NumAssign, NumAssignOps, NumOps, Signed};
 
 pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize) -> Option<DVector<T>> 
 where 
-    T: Scalar + Num + NumOps + NumAssign + NumAssignOps + Signed + Copy + Display
+    T: Scalar + Num + NumOps + NumAssign + NumAssignOps + Signed + Copy
 {
     let mut x = DVector::<T>::zeros(a.nrows());
     let mut new_x = DVector::<T>::zeros(a.nrows());
