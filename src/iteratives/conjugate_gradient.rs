@@ -1,3 +1,32 @@
+//! Conjugate Gradient iterative solver for sparse linear systems.
+//!
+//! This module provides functions to solve symmetric positive-definite linear systems
+//! using the Conjugate Gradient (CG) method for matrices in CSR and CSC formats.
+//!
+//! # Examples
+//!
+//! ```
+//! use nalgebra_sparse::{na::DVector, CsrMatrix};
+//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve_csr;
+//!
+//! let a = CsrMatrix::identity(3);
+//! let b = DVector::from_vec(vec![2.0; 3]);
+//! let result = solve_csr(&a, &b, 100);
+//! assert!(result.is_some());
+//! ```
+//!
+//! For CSC matrices:
+//!
+//! ```
+//! use nalgebra_sparse::{na::DVector, CscMatrix};
+//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve_csc;
+//!
+//! let a = CscMatrix::identity(3);
+//! let b = DVector::from_vec(vec![2.0; 3]);
+//! let result = solve_csc(&a, &b, 100);
+//! assert!(result.is_some());
+//! ```
+
 use nalgebra_sparse::{na::{DVector, Scalar, SimdPartialOrd}, CscMatrix, CsrMatrix};
 use num_traits::{real::Real, Num, NumAssign, NumAssignOps, NumOps, Signed};
 
