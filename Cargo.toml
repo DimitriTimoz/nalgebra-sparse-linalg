@@ -1,0 +1,9 @@
+[package]
+name = "nalgebra-sparse-linalg"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+nalgebra-sparse = "0.10"
