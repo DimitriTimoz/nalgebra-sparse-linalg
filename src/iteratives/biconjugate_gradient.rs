@@ -88,7 +88,40 @@ mod tests {
         for i in 0..prod.len() {
             assert!((prod[i] - b[i]).abs() < tol);
         }
+    }
 
-        
+    #[test]
+    fn test_biconjugate_grad_non_symmetric() {
+        // Matrice non symétrique 3x3
+        // | 4  1  2 |
+        // | 0  3 -1 |
+        // | 2  0  1 |
+        let m = [
+            [4.0, 1.0, 2.0],
+            [0.0, 3.0, -1.0],
+            [2.0, 0.0, 1.0],
+        ];
+        let b = [7.0, 2.0, 5.0];
+
+        let mut coo = CooMatrix::new(3, 3);
+        for (i, row) in m.iter().enumerate() {
+            for (j, &val) in row.iter().enumerate() {
+                if val != 0.0 {
+                    coo.push(i, j, val);
+                }
+            }
+        }
+        let a = CsrMatrix::from(&coo);
+        let b = DVector::from_vec(b.to_vec());
+        let max_iter = 2500;
+        let tol = 1e-10;
+        let result = solve::<CsrMatrix<f64>, f64>(&a, &b, max_iter, tol);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        let prod = &a * &result;
+        assert_eq!(prod.len(), 3);
+        for i in 0..prod.len() {
+            assert!((prod[i] - b[i]).abs() < tol);
+        }
     }
 }
