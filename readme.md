@@ -32,7 +32,7 @@ use nalgebra_sparse_linalg::iteratives::jacobi::solve;
 
 let a = CsrMatrix::identity(3);
 let b = DVector::from_vec(vec![1.0; 3]);
-let result = solve(&a, &b, 100);
+let result = solve(&a, &b, 100, 1e-10);
 assert!(result.is_some());
 ```
 

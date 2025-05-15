@@ -32,10 +32,10 @@ use super::*;
 ///
 /// let a = CsrMatrix::identity(3);
 /// let b = DVector::from_vec(vec![1.0; 3]);
-/// let result = solve(&a, &b, 100);
+/// let result = solve(&a, &b, 100, 1e-10);
 /// assert!(result.is_some());
 /// ```
-pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize) -> Option<DVector<T>> 
+pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
     T: SimdRealField + PartialOrd
 {
@@ -54,7 +54,7 @@ where
                     }
                 }
                 let diag = a.get_entry(row_i, row_i)?.into_value();
-                if diag.is_zero() {
+                if diag < tol {
                     return None;
                 }
                 new_x[row_i] = sigma / diag;
@@ -65,7 +65,7 @@ where
             m + (x_i.clone() - new_x_i.clone()).simd_norm1()
         });
         x = new_x.clone();
-        if norm.is_zero() {
+        if norm <= tol {
             return Some(new_x);
         }
     }
@@ -75,7 +75,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra_sparse::{na::DVector, CooMatrix};
+    use nalgebra_sparse::{na::{ComplexField, DVector}, CooMatrix};
 
     
     #[test]
@@ -84,7 +84,7 @@ mod tests {
         let b = DVector::from_vec(vec![3.0;10]);
         let max_iter = 2500;
 
-        let result = solve(&a, &b, max_iter);
+        let result = solve(&a, &b, max_iter, 1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
@@ -111,20 +111,20 @@ mod tests {
         let a = CsrMatrix::from(&coo);
         let b = DVector::from_vec(b.to_vec());
         let max_iter = 2500;
-        let result = solve(&a, &b, max_iter);
+        let result = solve(&a, &b, max_iter, 1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         let result = a * result;
         assert_eq!(result.len(), 4);
         for i in 0..result.len() {
-            assert_eq!(result[i], b[i]);
+            assert!((result[i] - b[i]).norm1() < 1e-9);
         }
 
         // Null test
         let a = CsrMatrix::identity(10);
         let b = DVector::from_vec(vec![0.0;10]);
         let max_iter = 2500;
-        let result = solve(&a, &b, max_iter);
+        let result = solve(&a, &b, max_iter, 1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
@@ -151,7 +151,7 @@ mod tests {
         let a = CsrMatrix::from(&coo);
         let b = DVector::from_vec(b.to_vec());
         let max_iter = 2500;
-        let result = solve(&a, &b, max_iter);
+        let result = solve(&a, &b, max_iter, 1e-10);
         assert!(result.is_none());
     }
 }
