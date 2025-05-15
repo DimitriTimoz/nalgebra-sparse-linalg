@@ -11,7 +11,7 @@
 //!
 //! let a = CsrMatrix::identity(3);
 //! let b = DVector::from_vec(vec![2.0; 3]);
-//! let result = solve_csr(&a, &b, 100);
+//! let result = solve_csr(&a, &b, 100, 1e-10);
 //! assert!(result.is_some());
 //! ```
 //!
@@ -23,42 +23,40 @@
 //!
 //! let a = CscMatrix::identity(3);
 //! let b = DVector::from_vec(vec![2.0; 3]);
-//! let result = solve_csc(&a, &b, 100);
+//! let result = solve_csc(&a, &b, 100, 1e-10);
 //! assert!(result.is_some());
 //! ```
 
-use nalgebra_sparse::{na::{DVector, Scalar, SimdPartialOrd}, CscMatrix, CsrMatrix};
-use num_traits::{real::Real, Num, NumAssign, NumAssignOps, NumOps, Signed};
+use nalgebra_sparse::{na::{DVector, SimdComplexField, SimdRealField}, CscMatrix, CsrMatrix};
 
 
-pub fn solve_csr<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize) -> Option<DVector<T>> 
+pub fn solve_csr<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
-    T: Scalar + Num + Real + NumOps + NumAssign + NumAssignOps + Copy + SimdPartialOrd + Signed
+    T: SimdRealField + PartialOrd
 {
     let mut x = DVector::<T>::zeros(a.nrows());
 
     let mut residual = b - a * &x;
     let mut residual_dot = residual.dot(&residual);
     // Check if the inital guess is already a solution
-    let tol = T::from(1e-10).unwrap();
-    let norm = residual.abs().max();
+    let norm = residual.magnitude();
     if norm <= tol {
         return Some(x);
     }
     let mut p = residual.clone();
     for _ in 0..max_iter {
         let ap = a * &p;
-        let alpha = residual_dot / p.dot(&ap);
-        x.axpy(alpha, &p, T::one());
+        let alpha = residual_dot.clone() / p.dot(&ap);
+        x.axpy(alpha.clone(), &p, T::one());
         let new_residual = &residual - &ap * alpha;
         
         // Check for convergence
-        let norm = new_residual.abs().max();
+        let norm = new_residual.magnitude();
         if norm <= tol {
             return Some(x);
         }
         let new_residual_dot = new_residual.dot(&new_residual);
-        let beta = new_residual_dot / residual_dot;
+        let beta = new_residual_dot.clone() / residual_dot;
         residual_dot = new_residual_dot;
         p = &new_residual + &p * beta;
         residual = new_residual;
@@ -66,46 +64,44 @@ where
     None
 }
 
-pub fn solve_csc<T>(a: &CscMatrix<T>, b: &DVector<T>, max_iter: usize) -> Option<DVector<T>> 
+pub fn solve_csc<T>(a: &CscMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
-    T: Scalar + Num + Real + NumOps + NumAssign + NumAssignOps + Copy + SimdPartialOrd + Signed
+    T: SimdRealField + PartialOrd
 {
     let mut x = DVector::<T>::zeros(a.nrows());
 
     let mut residual = b - a * &x;
     let mut residual_dot = residual.dot(&residual);
     // Check if the inital guess is already a solution
-    let tol = T::from(1e-10).unwrap();
-    let norm = residual.abs().max();
+    let norm = residual.magnitude();
     if norm <= tol {
         return Some(x);
     }
     let mut p = residual.clone();
     for _ in 0..max_iter {
         let ap = a * &p;
-        let alpha = residual_dot / p.dot(&ap);
-        x.axpy(alpha, &p, T::one());
+        let alpha = residual_dot.clone() / p.dot(&ap);
+        x.axpy(alpha.clone(), &p, T::one());
         let new_residual = &residual - &ap * alpha;
         
         // Check for convergence
-        let norm = new_residual.abs().max();
+        let norm = new_residual.magnitude();
         if norm <= tol {
             return Some(x);
         }
         let new_residual_dot = new_residual.dot(&new_residual);
-        let beta = new_residual_dot / residual_dot;
+        let beta = new_residual_dot.clone() / residual_dot;
         residual_dot = new_residual_dot;
         p = &new_residual + &p * beta;
         residual = new_residual;
-    }
-    None
+    }    None
 }
 
-pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize) -> Option<DVector<T>> 
+pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
-    T: Scalar + Num + Real + NumOps + NumAssign + NumAssignOps + Copy + SimdPartialOrd + Signed
+    T: SimdRealField + PartialOrd
 {
-    solve_csr(a, b, max_iter)
+    solve_csr(a, b, max_iter, tol)
 }
 
 #[cfg(test)]
@@ -119,7 +115,7 @@ mod tests {
         let b = DVector::from_vec(vec![3.0;10]);
         let max_iter = 2500;
 
-        let result = solve_csr(&a, &b, max_iter);
+        let result = solve_csr(&a, &b, max_iter,1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
@@ -146,20 +142,20 @@ mod tests {
         let a = CsrMatrix::from(&coo);
         let b = DVector::from_vec(b.to_vec());
         let max_iter = 2500;
-        let result = solve_csr(&a, &b, max_iter);
+        let result = solve_csr(&a, &b, max_iter, 1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         let prod = &a * &result;
         assert_eq!(prod.len(), 4);
         for i in 0..prod.len() {
-            assert!((prod[i] - b[i]).abs() < 1e-10);
+            assert!((prod[i] - b[i]).simd_abs() < 1e-10);
         }
 
         // Null test
         let a = CsrMatrix::identity(10);
         let b = DVector::from_vec(vec![0.0;10]);
         let max_iter = 2500;
-        let result = solve_csr(&a, &b, max_iter);
+        let result = solve_csr(&a, &b, max_iter, 1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
@@ -176,8 +172,7 @@ mod tests {
         let b = DVector::from_vec(vec![3.0;10]);
         let max_iter = 2500;
 
-        let result = super::solve_csc(&a, &b, max_iter);
-        assert!(result.is_some());
+        let result = super::solve_csc(&a, &b, max_iter, 1e-10);
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
         for i in 0..result.len() {
@@ -202,20 +197,20 @@ mod tests {
         let a = CscMatrix::from(&coo);
         let b = DVector::from_vec(b.to_vec());
         let max_iter = 2500;
-        let result = super::solve_csc(&a, &b, max_iter);
+        let result = super::solve_csc(&a, &b, max_iter, 1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         let prod = &a * &result;
         assert_eq!(prod.len(), 4);
         for i in 0..prod.len() {
-            assert!((prod[i] - b[i]).abs() < 1e-10);
+            assert!((prod[i] - b[i]).simd_abs() < 1e-10);
         }
 
         // Null test
         let a = CscMatrix::identity(10);
         let b = DVector::from_vec(vec![0.0;10]);
         let max_iter = 2500;
-        let result = super::solve_csc(&a, &b, max_iter);
+        let result = super::solve_csc(&a, &b, max_iter, 1e-10);
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.len(), 10);

@@ -9,5 +9,6 @@ edition = "2024"
 [lib]
 
 [dependencies]
+log = "0.4.27"
 nalgebra-sparse = "0.10"
 num-traits = "0.2"
