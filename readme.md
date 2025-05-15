@@ -10,6 +10,7 @@ Sparse linear algebra iterative solvers for [nalgebra_sparse](https://crates.io/
 
 - Jacobi iterative solver for sparse matrices in CSR format.
 - Conjugate Gradient solver for symmetric positive-definite matrices in CSR and CSC formats.
+- BiConjugate Gradient solver for general (possibly non-symmetric)
 - Generic over scalar types (e.g., `f32`, `f64`).
 - Simple API compatible with `nalgebra_sparse`'s matrix and vector types.
 
@@ -40,6 +41,18 @@ Example (Conjugate Gradient, CSC or CSR):
 ```rust
 use nalgebra_sparse::{na::DVector, CsrMatrix};
 use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve;
+
+let a = CsrMatrix::identity(3);
+let b = DVector::from_vec(vec![2.0; 3]);
+let result = solve(&a, &b, 100, 1e-10);
+assert!(result.is_some());
+```
+
+Example (BiConjugate Gradient, CSR or CSC):
+
+```rust
+use nalgebra_sparse::{na::DVector, CsrMatrix};
+use nalgebra_sparse_linalg::iteratives::biconjugate_gradient::solve;
 
 let a = CsrMatrix::identity(3);
 let b = DVector::from_vec(vec![2.0; 3]);

@@ -1,3 +1,20 @@
+//! BiConjugate Gradient iterative solver for sparse linear systems.
+//!
+//! This module provides a function to solve general (possibly non-symmetric) linear systems
+//! using the BiConjugate Gradient (BiCG) method for matrices in CSR format.
+//!
+//! # Example
+//!
+//! ```
+//! use nalgebra_sparse::{na::DVector, CsrMatrix};
+//! use nalgebra_sparse_linalg::iteratives::biconjugate_gradient::solve;
+//!
+//! let a = CsrMatrix::identity(3);
+//! let b = DVector::from_vec(vec![2.0; 3]);
+//! let result = solve(&a, &b, 100, 1e-10);
+//! assert!(result.is_some());
+//! ```
+
 use super::*;
 
 pub fn solve<M, T>(a: &M, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
@@ -32,7 +49,7 @@ where
         if new_residual.magnitude() <= tol {
             return Some(x);
         }
-        let new_residual_dot = residual_hat_0.dot(&new_residual);
+        let new_residual_dot: T = residual_hat_0.dot(&new_residual);
         let beta = (new_residual_dot.clone()/residual_dot.clone())*(alpha.clone()/omega.clone());
         p = &new_residual + &((&p - &v * omega.clone()) * beta);
         residual_dot = new_residual_dot;
@@ -40,7 +57,6 @@ where
     }
     None
 }
-
 
 #[cfg(test)]
 mod tests {

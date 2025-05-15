@@ -5,8 +5,7 @@
 //! in CSR format. The Jacobi method is suitable for diagonally dominant matrices
 //! and is implemented generically for types that implement the required numeric traits.
 
-use nalgebra_sparse::{na::{DVector, Scalar}, CsrMatrix};
-use num_traits::{Num, NumAssign, NumAssignOps, NumOps, Signed};
+use super::*;
 
 /// Solves the linear system `Ax = b` using the Jacobi iterative method.
 ///
@@ -38,20 +37,20 @@ use num_traits::{Num, NumAssign, NumAssignOps, NumOps, Signed};
 /// ```
 pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize) -> Option<DVector<T>> 
 where 
-    T: Scalar + Num + NumOps + NumAssign + NumAssignOps + Signed + Copy
+    T: SimdRealField + PartialOrd
 {
     let mut x = DVector::<T>::zeros(a.nrows());
     let mut new_x = DVector::<T>::zeros(a.nrows());
     for _ in 0..max_iter {
         for row_i in 0..a.nrows() {
             if let Some(row) = &a.get_row(row_i) {
-                let mut sigma = b[row_i];
+                let mut sigma = b[row_i].clone();
 
                 let col_indices = row.col_indices();
                 let values = row.values();
                 for (col_i, value) in col_indices.iter().zip(values.iter()) {
                     if *col_i != row_i {
-                        sigma -= *value * x[*col_i];
+                        sigma -= value.clone() * x[*col_i].clone();
                     }
                 }
                 let diag = a.get_entry(row_i, row_i)?.into_value();
@@ -63,7 +62,7 @@ where
         }
         // Check for convergence
         let norm = x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
-            m + (*x_i - *new_x_i).abs()
+            m + (x_i.clone() - new_x_i.clone()).simd_norm1()
         });
         x = new_x.clone();
         if norm.is_zero() {
