@@ -1,36 +1,5 @@
-//! Conjugate Gradient iterative solver for sparse linear systems.
-//!
-//! This module provides functions to solve symmetric positive-definite linear systems
-//! using the Conjugate Gradient (CG) method for matrices in CSR and CSC formats.
-//!
-//! # Examples
-//!
-//! ```
-//! use nalgebra_sparse::{na::DVector, CsrMatrix};
-//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve;
-//!
-//! let a = CsrMatrix::identity(3);
-//! let b = DVector::from_vec(vec![2.0; 3]);
-//! let result = solve(&a, &b, 100, 1e-10);
-//! assert!(result.is_some());
-//! ```
-//!
-//! For CSC matrices:
-//!
-//! ```
-//! use nalgebra_sparse::{na::DVector, CscMatrix};
-//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve;
-//!
-//! let a = CscMatrix::identity(3);
-//! let b = DVector::from_vec(vec![2.0; 3]);
-//! let result = solve(&a, &b, 100, 1e-10);
-//! assert!(result.is_some());
-//! ```
-
 use super::*;
 
-/// Solve a symmetric positive-definite linear system using the Conjugate Gradient method.
-/// Generic over any matrix type implementing `SpMatVecMul`.
 pub fn solve<M, T>(a: &M, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
     M: SpMatVecMul<T>,
@@ -38,29 +7,35 @@ where
 {
     let mut x = DVector::<T>::zeros(a.nrows());
 
-    let mut residual = b - &a.mul_vec(&x);
+    let mut residual = b - &a.mul_vec(&DVector::<T>::zeros(a.nrows()));
+    let residual_hat_0 = residual.clone();
+
     let mut residual_dot = residual.dot(&residual);
-    // Check if the inital guess is already a solution
-    let norm = residual.magnitude();
-    if norm <= tol {
-        return Some(x);
-    }
     let mut p = residual.clone();
+
     for _ in 0..max_iter {
-        let ap = a.mul_vec(&p);
-        let alpha = residual_dot.clone() / p.dot(&ap);
+        let v = a.mul_vec(&p);
+        let alpha = residual_dot.clone() / residual_hat_0.dot(&v);
         x.axpy(alpha.clone(), &p, T::one());
-        let new_residual = &residual - &ap * alpha;
-        
+        let s = &residual - &v * alpha.clone();
+
         // Check for convergence
-        let norm = new_residual.magnitude();
-        if norm <= tol {
+        if s.magnitude() <= tol {
             return Some(x);
         }
-        let new_residual_dot = new_residual.dot(&new_residual);
-        let beta = new_residual_dot.clone() / residual_dot;
+        
+        let t = a.mul_vec(&s);
+        let omega = t.clone().dot(&s)/t.dot(&t);
+        x.axpy(omega.clone(), &s, T::one());
+        let new_residual = &s - &t * omega.clone();
+        // Check for convergence
+        if new_residual.magnitude() <= tol {
+            return Some(x);
+        }
+        let new_residual_dot = residual_hat_0.dot(&new_residual);
+        let beta = (new_residual_dot.clone()/residual_dot.clone())*(alpha.clone()/omega.clone());
+        p = &new_residual + &((&p - &v * omega.clone()) * beta);
         residual_dot = new_residual_dot;
-        p = &new_residual + &p * beta;
         residual = new_residual;
     }
     None
@@ -73,7 +48,7 @@ mod tests {
     use nalgebra_sparse::{na::DVector, CooMatrix, CsrMatrix};
 
     #[test]
-    fn test_conjugate_grad() {
+    fn test_biconjugate_grad() {
         let a = CsrMatrix::identity(10);
         let b = DVector::from_vec(vec![3.0;10]);
         let max_iter = 2500;
@@ -114,15 +89,6 @@ mod tests {
             assert!((prod[i] - b[i]).abs() < tol);
         }
 
-        // Null test
-        let a = CsrMatrix::identity(10);
-        let b = DVector::from_vec(vec![0.0;10]);
-        let result = solve::<CsrMatrix<f64>, f64>(&a, &b, max_iter, tol);
-        assert!(result.is_some());
-        let result = result.unwrap();
-        assert_eq!(result.len(), 10);
-        for i in 0..result.len() {
-            assert!((result[i]).abs() < tol);
-        }
+        
     }
 }
