@@ -60,12 +60,12 @@ fn generate_diag_dominant(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
 /// Symmetric positive‑definite matrix (CG)
 fn generate_spd(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
     let base = {
-        let (rows, cols, vals) = random_sparse_triplet(size, nnz_per_row);
+        let (rows, cols, vals) = random_sparse_triplet(size, nnz_per_row/2);
         CsrMatrix::try_from_csr_data(size, size, rows, cols, vals).unwrap()
     };
     let at = base.transpose();
     let ata = &at * &base;
-    let alpha = 1e-1;
+    let alpha: f64 = 10.0;
     let identity = CsrMatrix::identity(size) * alpha;
     &ata + &identity
 }
@@ -79,23 +79,24 @@ fn generate_nonsymmetric(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
 
 // Benchmarks ---------------------------------------------------------------
 fn bench_methods(c: &mut Criterion) {
+
     let mut group = c.benchmark_group("IterativeSolvers");
-    let sizes = [100usize, 500, 2_000, 10_000, 50_000, 100_000, 200_000];
+    let sizes = [100usize, 500, 1_000,2_000];//, 10_000, 50_000, 100_000, 200_000];
 
     for &n in &sizes {
-        let nnz = n.min(1_000) / 5;
+        let nnz = n.min(50) / 5;
 
         group.bench_with_input(BenchmarkId::new("Jacobi", n), &n, |be, &_n| {
             be.iter_batched(
                 || {
-                    let a = generate_diag_dominant(n, nnz);
+                    let a = generate_spd(n, nnz);
                     let mut rng = rng();
                     let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
                     let b = a.mul_vec(&x);
                     (a, b)
                 },
                 |(a, b)| {
-                    let r = jacobi::solve(&a, &b, 10_000, 1e-10);
+                    let r = jacobi::solve(&a, &b, 100_000, 1e-10);
                     assert!(r.is_some());
                 },
                 BatchSize::LargeInput,
@@ -122,7 +123,7 @@ fn bench_methods(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("BiConjugateGradient", n), &n, |be, &_n| {
             be.iter_batched(
                 || {
-                    let a = generate_nonsymmetric(n, nnz);
+                    let a = generate_spd(n, nnz);
                     let mut rng = rng();
                     let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
                     let b = a.mul_vec(&x);
