@@ -35,27 +35,15 @@ let result = solve(&a, &b, 100);
 assert!(result.is_some());
 ```
 
-Example (Conjugate Gradient, CSR):
+Example (Conjugate Gradient, CSC or CSR):
 
 ```rust
 use nalgebra_sparse::{na::DVector, CsrMatrix};
-use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve_csr;
+use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve;
 
 let a = CsrMatrix::identity(3);
 let b = DVector::from_vec(vec![2.0; 3]);
-let result = solve_csr(&a, &b, 100, 1e-10);
-assert!(result.is_some());
-```
-
-Example (Conjugate Gradient, CSC):
-
-```rust
-use nalgebra_sparse::{na::DVector, CscMatrix};
-use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve_csc;
-
-let a = CscMatrix::identity(3);
-let b = DVector::from_vec(vec![2.0; 3]);
-let result = solve_csc(&a, &b, 100, 1e-10);
+let result = solve(&a, &b, 100, 1e-10);
 assert!(result.is_some());
 ```
 

@@ -7,11 +7,11 @@
 //!
 //! ```
 //! use nalgebra_sparse::{na::DVector, CsrMatrix};
-//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve_csr;
+//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve;
 //!
 //! let a = CsrMatrix::identity(3);
 //! let b = DVector::from_vec(vec![2.0; 3]);
-//! let result = solve_csr(&a, &b, 100, 1e-10);
+//! let result = solve(&a, &b, 100, 1e-10);
 //! assert!(result.is_some());
 //! ```
 //!
@@ -19,11 +19,11 @@
 //!
 //! ```
 //! use nalgebra_sparse::{na::DVector, CscMatrix};
-//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve_csc;
+//! use nalgebra_sparse_linalg::iteratives::conjugate_gradient::solve;
 //!
 //! let a = CscMatrix::identity(3);
 //! let b = DVector::from_vec(vec![2.0; 3]);
-//! let result = solve_csc(&a, &b, 100, 1e-10);
+//! let result = solve(&a, &b, 100, 1e-10);
 //! assert!(result.is_some());
 //! ```
 
@@ -43,23 +43,30 @@ impl<T: SimdRealField> SpMatVecMul<T> for CscMatrix<T> {
     #[inline] fn mul_vec(&self, v: &DVector<T>) -> DVector<T> { self * v }
 }
 
-pub fn solve_csr<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>>
-where
-    T: SimdRealField + PartialOrd,
+/// Solve a symmetric positive-definite linear system using the Conjugate Gradient method.
+/// Generic over any matrix type implementing `SpMatVecMul`.
+pub fn solve<M, T>(a: &M, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
+where 
+    M: SpMatVecMul<T>,
+    T: SimdRealField + PartialOrd
 {
     let mut x = DVector::<T>::zeros(a.nrows());
-    let mut residual = b - a * &x;
+
+    let mut residual = b - &a.mul_vec(&x);
     let mut residual_dot = residual.dot(&residual);
+    // Check if the inital guess is already a solution
     let norm = residual.magnitude();
     if norm <= tol {
         return Some(x);
     }
     let mut p = residual.clone();
     for _ in 0..max_iter {
-        let ap = a * &p;
+        let ap = a.mul_vec(&p);
         let alpha = residual_dot.clone() / p.dot(&ap);
         x.axpy(alpha.clone(), &p, T::one());
         let new_residual = &residual - &ap * alpha;
+        
+        // Check for convergence
         let norm = new_residual.magnitude();
         if norm <= tol {
             return Some(x);
@@ -73,41 +80,11 @@ where
     None
 }
 
-pub fn solve_csc<T>(a: &CscMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>>
-where
-    T: SimdRealField + PartialOrd,
-{
-    let mut x = DVector::<T>::zeros(a.nrows());
-    let mut residual = b - a * &x;
-    let mut residual_dot = residual.dot(&residual);
-    let norm = residual.magnitude();
-    if norm <= tol {
-        return Some(x);
-    }
-    let mut p = residual.clone();
-    for _ in 0..max_iter {
-        let ap = a * &p;
-        let alpha = residual_dot.clone() / p.dot(&ap);
-        x.axpy(alpha.clone(), &p, T::one());
-        let new_residual = &residual - &ap * alpha;
-        let norm = new_residual.magnitude();
-        if norm <= tol {
-            return Some(x);
-        }
-        let new_residual_dot = new_residual.dot(&new_residual);
-        let beta = new_residual_dot.clone() / residual_dot;
-        residual_dot = new_residual_dot;
-        p = &new_residual + &p * beta;
-        residual = new_residual;
-    }
-    None
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use nalgebra_sparse::{na::DVector, CooMatrix, CsrMatrix};
-    use num_traits::Float;
 
     #[test]
     fn test_conjugate_grad() {
@@ -116,7 +93,7 @@ mod tests {
         let max_iter = 2500;
         let tol = 1e-10;
 
-        let result = solve_csr(&a, &b, max_iter, tol);
+        let result = solve::<CsrMatrix<f64>, f64>(&a, &b, max_iter, tol);
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
@@ -142,7 +119,7 @@ mod tests {
         // Convert CooMatrix to CsrMatrix
         let a = CsrMatrix::from(&coo);
         let b = DVector::from_vec(b.to_vec());
-        let result = solve_csr(&a, &b, max_iter, tol);
+        let result = solve::<CsrMatrix<f64>, f64>(&a, &b, max_iter, tol);
         assert!(result.is_some());
         let result = result.unwrap();
         let prod = &a * &result;
@@ -154,7 +131,7 @@ mod tests {
         // Null test
         let a = CsrMatrix::identity(10);
         let b = DVector::from_vec(vec![0.0;10]);
-        let result = solve_csr(&a, &b, max_iter, tol);
+        let result = solve::<CsrMatrix<f64>, f64>(&a, &b, max_iter, tol);
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
