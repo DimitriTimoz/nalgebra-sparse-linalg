@@ -27,7 +27,7 @@
 //! assert!(result.is_some());
 //! ```
 
-use nalgebra_sparse::{na::{DVector, SimdComplexField, SimdRealField}, CscMatrix, CsrMatrix};
+use nalgebra_sparse::{na::{DVector, SimdRealField}, CscMatrix, CsrMatrix};
 
 
 pub fn solve_csr<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
@@ -107,7 +107,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra_sparse::{na::DVector, CooMatrix};
+    use nalgebra_sparse::{na::{DVector, SimdComplexField}, CooMatrix};
 
     #[test]
     fn test_conjugate_grad_csr() {
