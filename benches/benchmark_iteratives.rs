@@ -136,7 +136,7 @@ fn bench_methods(c: &mut Criterion) {
                         (a, b)
                     },
                     |(a, b)| {
-                        let r = relaxation::solve(&a, &b, 100_000, 0.5, 1e-10);
+                        let r = relaxation::solve(&a, &b, 100_000, 0.66, 1e-10);
                         assert!(r.is_some());
                     },
                     BatchSize::LargeInput,

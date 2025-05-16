@@ -20,7 +20,7 @@ use super::*;
 pub fn solve<M, T>(a: &M, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
     M: SpMatVecMul<T>,
-    T: SimdRealField + PartialOrd
+    T: SimdRealField + PartialOrd + Copy
 {
     let n = a.nrows();
     let mut x = DVector::<T>::zeros(n);
@@ -30,16 +30,16 @@ where
     let residual_hat_0 = residual.clone(); // Should be a random or fixed vector for BiCG
 
     let mut residual_dot = residual.dot(&residual_hat_0);
-    if residual_dot.clone().simd_norm1() <= tol {
+    if residual.clone().magnitude() <= tol {
         return Some(x);
     }
     let mut p = residual.clone();
 
     for _ in 0..max_iter {
-        let v = a.mul_vec(&p);
-        let alpha = residual_dot.clone() / residual_hat_0.dot(&v);
-        x.axpy(alpha.clone(), &p, T::one());
-        let s = &residual - &v * alpha.clone();
+        let mut v = a.mul_vec(&p);
+        let alpha = residual_dot / residual_hat_0.dot(&v);
+        x.axpy(alpha, &p, T::one());
+        let s = &residual - &v * alpha;
 
         // Check for convergence
         if s.magnitude() <= tol {
@@ -48,15 +48,18 @@ where
         
         let t = a.mul_vec(&s);
         let omega = t.dot(&s)/t.dot(&t);
-        x.axpy(omega.clone(), &s, T::one());
-        let new_residual = &s - &t * omega.clone();
+        x.axpy(omega, &s, T::one());
+        let new_residual = &s - &t * omega;
         // Check for convergence
         if new_residual.magnitude() <= tol {
             return Some(x);
         }
-        let new_residual_dot: T = residual_hat_0.dot(&new_residual);
-        let beta = (new_residual_dot.clone()/residual_dot.clone())*(alpha.clone()/omega.clone());
-        p = &new_residual + &((&p - &v * omega.clone()) * beta);
+        let new_residual_dot = residual_hat_0.dot(&new_residual);
+        let beta = (new_residual_dot/residual_dot)*(alpha/omega);
+        v.scale_mut(omega);
+        p -= &v;
+        p.scale_mut(beta);
+        p += &new_residual;
         residual_dot = new_residual_dot;
         residual = new_residual;
     }

@@ -116,7 +116,7 @@ fn test_gauss_seidel_nontrivial() {
 #[test]
 fn test_relaxation_nontrivial() {
     let (a, b, x_true) = get_simple_csr();
-    let result = relaxation::solve(&a, &b, 500, 1.0, 1e-8);
+    let result = relaxation::solve(&a, &b, 500, 0.8, 1e-8);
     assert!(result.is_some());
     assert!((result.unwrap() - x_true).amax() < 1e-6);
 }
@@ -156,7 +156,7 @@ fn test_gauss_seidel_diagonal_dominant() {
 #[test]
 fn test_relaxation_diagonal_dominant() {
     let (a, b, x_true) = get_diagonal_dominant();
-    let result = relaxation::solve(&a, &b, 1000, 1.0, 1e-8);
+    let result = relaxation::solve(&a, &b, 1000, 0.8, 1e-8);
     assert!(result.is_some());
     assert!((result.unwrap() - x_true).amax() < 1e-6);
 }
