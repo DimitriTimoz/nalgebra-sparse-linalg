@@ -36,13 +36,27 @@ let result = solve(&a, &b, 100, 1e-10);
 assert!(result.is_some());
 ```
 
+Exxample (Gauss-Seidel):
+
 ```rust
 use nalgebra_sparse::{na::DVector, CsrMatrix};
-use nalgebra_sparse_linalg::iteratives::gagauss_seideluss::solve;
+use nalgebra_sparse_linalg::iteratives::gauss_seidel::solve;
 
 let a = CsrMatrix::identity(3);
 let b = DVector::from_vec(vec![1.0; 3]);
 let result = solve(&a, &b, 100, 1e-10);
+assert!(result.is_some());
+```
+
+Example Relaxation:
+
+```rust
+use nalgebra_sparse::{na::DVector, CsrMatrix};
+use nalgebra_sparse_linalg::iteratives::relaxation::solve;
+
+let a = CsrMatrix::identity(3);
+let b = DVector::from_vec(vec![1.0; 3]);
+let result = solve(&a, &b, 100, 0.8, 1e-10);
 assert!(result.is_some());
 ```
 

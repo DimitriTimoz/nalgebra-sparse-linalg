@@ -166,7 +166,7 @@ mod tests {
         let result = result.unwrap();
         assert_eq!(result.len(), 10);
         for i in 0..result.len() {
-            assert_eq!(result[i], 0.0);
+            assert!((result[i] - b[i]).norm1() < 1e-9);
         }
 
         // Non converging test

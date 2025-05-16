@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use nalgebra_sparse::na::DVector;
 use nalgebra_sparse::CsrMatrix;
-use nalgebra_sparse_linalg::iteratives::{biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, SpMatVecMul};
+use nalgebra_sparse_linalg::iteratives::{biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation, SpMatVecMul};
 use rand::{rng, Rng};
 use rand::seq::SliceRandom;
 use std::env;
@@ -118,6 +118,25 @@ fn bench_methods(c: &mut Criterion) {
                     },
                     |(a, b)| {
                         let r = gauss_seidel::solve(&a, &b, 100_000, 1e-10);
+                        assert!(r.is_some());
+                    },
+                    BatchSize::LargeInput,
+                );
+            });
+        }
+         // Only run Relaxation if BENCH_METHOD is unset or matches
+        if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("relaxation")) {
+            group.bench_with_input(BenchmarkId::new("Relaxation", n), &n, |be, &_n| {
+                be.iter_batched(
+                    || {
+                        let a = generate_spd(n, nnz);
+                        let mut rng = rng();
+                        let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
+                        let b = a.mul_vec(&x);
+                        (a, b)
+                    },
+                    |(a, b)| {
+                        let r = relaxation::solve(&a, &b, 100_000, 0.5, 1e-10);
                         assert!(r.is_some());
                     },
                     BatchSize::LargeInput,
