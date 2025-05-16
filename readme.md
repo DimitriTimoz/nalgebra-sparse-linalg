@@ -24,7 +24,7 @@ nalgebra-sparse-linalg = "0.1"
 nalgebra-sparse = "0.9"
 ```
 
-Example (Jacobi):
+Example (Jacobi, CSR):
 
 ```rust
 use nalgebra_sparse::{na::DVector, CsrMatrix};
@@ -36,7 +36,7 @@ let result = solve(&a, &b, 100, 1e-10);
 assert!(result.is_some());
 ```
 
-Exxample (Gauss-Seidel):
+Exxample (Gauss-Seidel, CSR):
 
 ```rust
 use nalgebra_sparse::{na::DVector, CsrMatrix};
@@ -48,7 +48,7 @@ let result = solve(&a, &b, 100, 1e-10);
 assert!(result.is_some());
 ```
 
-Example Relaxation:
+Example (Relaxation, CSR):
 
 ```rust
 use nalgebra_sparse::{na::DVector, CsrMatrix};
