@@ -1,5 +1,46 @@
 use super::*;
 
+struct AlternatingRange {
+    len: usize,
+    reversed: bool,
+    current: usize,
+}
+
+impl AlternatingRange {
+    fn new(len: usize) -> Self {
+        Self {
+            len,
+            reversed: true,
+            current: 0,
+        }
+    }
+    fn is_reversed(&self) -> bool {
+        self.reversed
+    }
+    fn alternate(&mut self) {
+        self.reversed = !self.reversed;
+        self.current = 0;
+    }
+}
+
+impl Iterator for AlternatingRange {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current >= self.len {
+            return None;
+        }
+
+        let index = if self.reversed {
+            self.len - 1 - self.current
+        } else {
+            self.current
+        };
+
+        self.current += 1;
+        Some(index)
+    }
+}
 /// Solves the linear system Ax = b using the Gauss-Seidel iterative method.
 ///
 /// The Gauss-Seidel method improves upon Jacobi by immediately using newly computed values
@@ -18,15 +59,19 @@ where
 {
     let mut x = DVector::<T>::zeros(a.nrows());
     let mut new_x = DVector::<T>::zeros(a.nrows());
+
+    let mut range = AlternatingRange::new(a.nrows());
     for _ in 0..max_iter {
-        for row_i in 0..a.nrows() {
+        range.alternate();
+        let is_reversed = range.is_reversed();
+        for row_i in range.by_ref() {
             if let Some(row) = &a.get_row(row_i) {
                 let mut sigma = b[row_i].clone();
 
                 let col_indices = row.col_indices();
                 let values = row.values();
                 for (col_i, value) in col_indices.iter().zip(values.iter()) {
-                    let x_val = if *col_i < row_i {
+                    let x_val = if *col_i < row_i && !is_reversed {
                         new_x[*col_i].clone()
                     } else {
                         x[*col_i].clone()
