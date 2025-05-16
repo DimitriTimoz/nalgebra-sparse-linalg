@@ -26,8 +26,13 @@ where
                 let col_indices = row.col_indices();
                 let values = row.values();
                 for (col_i, value) in col_indices.iter().zip(values.iter()) {
+                    let x_val = if *col_i < row_i {
+                        new_x[*col_i].clone()
+                    } else {
+                        x[*col_i].clone()
+                    };
                     if *col_i != row_i {
-                        sigma -= value.clone() * new_x[*col_i].clone();
+                        sigma -= value.clone() * x_val;
                     }
                 }
                 let diag = a.get_entry(row_i, row_i)?.into_value();
@@ -41,7 +46,7 @@ where
         let norm = x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
             m + (x_i.clone() - new_x_i.clone()).simd_norm1()
         });
-        x = new_x.clone();
+        std::mem::swap(&mut x, &mut new_x);
         if norm <= tol {
             return Some(new_x);
         }

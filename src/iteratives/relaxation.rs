@@ -54,7 +54,7 @@ where
         let norm = x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
             m + (x_i.clone() - new_x_i.clone()).simd_norm1()
         });
-        x = new_x.clone();
+        std::mem::swap(&mut x, &mut new_x);
         if norm <= tol {
             return Some(new_x);
         }
