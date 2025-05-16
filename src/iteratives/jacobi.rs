@@ -37,34 +37,68 @@ use super::*;
 /// ```
 pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
-    T: SimdRealField + PartialOrd
+    T: SimdRealField + PartialOrd + Send + Sync
 {
     let mut x = DVector::<T>::zeros(a.nrows());
     let mut new_x = DVector::<T>::zeros(a.nrows());
+    let n = a.nrows();
+    let use_parallel = n >= 10_000;
     for _ in 0..max_iter {
-        for row_i in 0..a.nrows() {
-            if let Some(row) = &a.get_row(row_i) {
-                let mut sigma = b[row_i].clone();
-
-                let col_indices = row.col_indices();
-                let values = row.values();
-                for (col_i, value) in col_indices.iter().zip(values.iter()) {
-                    if *col_i != row_i {
-                        sigma -= value.clone() * x[*col_i].clone();
+        if use_parallel {
+            new_x.as_mut_slice()
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(row_i, new_x_i)| {
+                    if let Some(row) = a.get_row(row_i) {
+                        let mut sigma = b[row_i].clone();
+                        let col_indices = row.col_indices();
+                        let values = row.values();
+                        for (col_i, value) in col_indices.iter().zip(values.iter()) {
+                            if *col_i != row_i {
+                                sigma -= value.clone() * x[*col_i].clone();
+                            }
+                        }
+                        let diag = a.get_entry(row_i, row_i).map(|v| v.into_value());
+                        if let Some(diag) = diag {
+                            if diag < tol {
+                                *new_x_i = T::zero();
+                            } else {
+                                *new_x_i = sigma / diag;
+                            }
+                        } else {
+                            *new_x_i = T::zero();
+                        }
                     }
+                });
+        } else {
+            for row_i in 0..a.nrows() {
+                if let Some(row) = &a.get_row(row_i) {
+                    let mut sigma = b[row_i].clone();
+                    let col_indices = row.col_indices();
+                    let values = row.values();
+                    for (col_i, value) in col_indices.iter().zip(values.iter()) {
+                        if *col_i != row_i {
+                            sigma -= value.clone() * x[*col_i].clone();
+                        }
+                    }
+                    let diag = a.get_entry(row_i, row_i)?.into_value();
+                    if diag < tol {
+                        return None;
+                    }
+                    new_x[row_i] = sigma / diag;
                 }
-                let diag = a.get_entry(row_i, row_i)?.into_value();
-                if diag < tol {
-                    return None;
-                }
-                new_x[row_i] = sigma / diag;
             }
         }
-        // Check for convergence
-        let norm = x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
-            m + (x_i.clone() - new_x_i.clone()).simd_norm1()
-        });
-        x = new_x.clone();
+        let norm = if use_parallel {
+            (0..n).into_par_iter()
+                .map(|i| (x[i].clone() - new_x[i].clone()).simd_norm1())
+                .reduce(|| T::zero(), |a, b| a + b)
+        } else {
+            x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
+                m + (x_i.clone() - new_x_i.clone()).simd_norm1()
+            })
+        };
+        std::mem::swap(&mut x, &mut new_x);
         if norm <= tol {
             return Some(x);
         }
@@ -77,7 +111,6 @@ mod tests {
     use super::*;
     use nalgebra_sparse::{na::{ComplexField, DVector}, CooMatrix};
 
-    
     #[test]
     fn test_jacobi() {
         let a = CsrMatrix::identity(10);

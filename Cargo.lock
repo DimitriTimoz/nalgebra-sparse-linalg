@@ -330,6 +330,7 @@ dependencies = [
  "log",
  "nalgebra-sparse",
  "rand",
+ "rayon",
 ]
 
 [[package]]

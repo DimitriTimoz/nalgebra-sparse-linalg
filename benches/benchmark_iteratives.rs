@@ -81,7 +81,8 @@ fn generate_nonsymmetric(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
 fn bench_methods(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("IterativeSolvers");
-    let sizes = [100usize, 500, 1_000,2_000];//, 10_000, 50_000, 100_000, 200_000];
+    
+    let sizes = [100usize, 500, 1_000,2_000, 10_000];//, 10_000, 50_000, 100_000, 200_000];
 
     for &n in &sizes {
         let nnz = n.min(50) / 5;

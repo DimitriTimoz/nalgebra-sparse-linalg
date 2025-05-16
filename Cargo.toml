@@ -11,6 +11,7 @@ edition = "2024"
 [dependencies]
 log = "0.4.27"
 nalgebra-sparse = "0.10"
+rayon = "1.10"
 
 [dev-dependencies]
 criterion = { version = "0.5" }
