@@ -48,3 +48,86 @@ where
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra_sparse::{na::{ComplexField, DVector}, CooMatrix};
+
+    #[test]
+    fn test_gauss_seidel() {
+        let a = CsrMatrix::identity(10);
+        let b = DVector::from_vec(vec![3.0;10]);
+        let max_iter = 2500;
+
+        let result = solve(&a, &b, max_iter, 1e-10);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert_eq!(result.len(), 10);
+        for i in 0..result.len() {
+            assert_eq!(result[i], 3.0);
+        }
+        
+        let m = [[10., -1., 2., 0.],
+              [-1., 11., -1., 3.],
+              [2., -1., 10., -1.],
+              [0.0, 3., -1., 8.]];
+        let b = [6., 25., -11., 15.];
+        
+        // Create a CooMatrix and fill it with values
+        let mut coo = CooMatrix::new(4, 4);
+        for (i, row) in m.iter().enumerate() {
+            for (j, &val) in row.iter().enumerate() {
+                if val != 0.0 {
+                    coo.push(i, j, val);
+                }
+            }
+        }
+        // Convert CooMatrix to CsrMatrix
+        let a = CsrMatrix::from(&coo);
+        let b = DVector::from_vec(b.to_vec());
+        let max_iter = 2500;
+        let result = solve(&a, &b, max_iter, 1e-10);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        let result = a * result;
+        assert_eq!(result.len(), 4);
+        for i in 0..result.len() {
+            assert!((result[i] - b[i]).norm1() < 1e-9);
+        }
+
+        // Null test
+        let a = CsrMatrix::identity(10);
+        let b = DVector::from_vec(vec![0.0;10]);
+        let max_iter = 2500;
+        let result = solve(&a, &b, max_iter, 1e-10);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert_eq!(result.len(), 10);
+        for i in 0..result.len() {
+            assert_eq!(result[i], 0.0);
+        }
+
+        // Non converging test
+        let m = [[1., 2., 3., 4.],
+              [5., 6., 7., 8.],
+              [9., 10., 11., 12.],
+              [13., 14., 15., 16.]];
+        let b = [1., 2., 3., 4.];
+        // Create a CooMatrix and fill it with values
+        let mut coo = CooMatrix::new(4, 4);
+        for (i, row) in m.iter().enumerate() {
+            for (j, &val) in row.iter().enumerate() {
+                if val != 0.0 {
+                    coo.push(i, j, val);
+                }
+            }
+        }
+        // Convert CooMatrix to CsrMatrix
+        let a = CsrMatrix::from(&coo);
+        let b = DVector::from_vec(b.to_vec());
+        let max_iter = 2500;
+        let result = solve(&a, &b, max_iter, 1e-10);
+        assert!(result.is_none());
+    }
+}
