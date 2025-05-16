@@ -24,6 +24,10 @@ use super::*;
 ///
 /// * `T` - The scalar type, which must implement the required numeric traits.
 ///
+/// # Note
+/// Jacobi is parallelized for large matrices (>= 10,000 rows) using Rayon.
+/// For smaller matrices, it runs sequentially.
+/// 
 /// # Example
 ///
 /// ```
