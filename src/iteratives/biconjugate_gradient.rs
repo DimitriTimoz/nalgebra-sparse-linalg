@@ -22,12 +22,17 @@ where
     M: SpMatVecMul<T>,
     T: SimdRealField + PartialOrd
 {
-    let mut x = DVector::<T>::zeros(a.nrows());
+    let n = a.nrows();
+    let mut x = DVector::<T>::zeros(n);
 
-    let mut residual = b - &a.mul_vec(&DVector::<T>::zeros(a.nrows()));
-    let residual_hat_0 = residual.clone();
+    // Initial residual: r0 = b - A * x0, but x0 = 0 => r0 = b
+    let mut residual = b.clone();
+    let residual_hat_0 = residual.clone(); // Should be a random or fixed vector for BiCG
 
-    let mut residual_dot = residual.dot(&residual);
+    let mut residual_dot = residual.dot(&residual_hat_0);
+    if residual_dot.clone().simd_norm1() <= tol {
+        return Some(x);
+    }
     let mut p = residual.clone();
 
     for _ in 0..max_iter {
@@ -42,7 +47,7 @@ where
         }
         
         let t = a.mul_vec(&s);
-        let omega = t.clone().dot(&s)/t.dot(&t);
+        let omega = t.dot(&s)/t.dot(&t);
         x.axpy(omega.clone(), &s, T::one());
         let new_residual = &s - &t * omega.clone();
         // Check for convergence
