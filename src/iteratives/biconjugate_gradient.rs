@@ -71,9 +71,6 @@ where
     M: SpMatVecMul<T>,
     T: SimdRealField + PartialOrd + Copy
 {
-    let n = a.nrows();
-    let mut x = DVector::<T>::zeros(n);
-
     // Initial residual: r0 = b - A * x0, but x0 = 0 => r0 = b
     let mut residual = b.clone();
     let residual_hat_0 = residual.clone(); // Should be a random or fixed vector for BiCG

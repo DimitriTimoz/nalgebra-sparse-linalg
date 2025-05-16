@@ -122,10 +122,10 @@ where
         let norm = x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
             m + (x_i.clone() - new_x_i.clone()).simd_norm1()
         });
+        std::mem::swap(x, &mut new_x);
         if norm <= tol {
             return true;
         }
-        std::mem::swap(x, &mut new_x);
     }
     false
 }
