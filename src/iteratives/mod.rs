@@ -1,6 +1,7 @@
 pub mod jacobi;
 pub mod biconjugate_gradient;
 pub mod conjugate_gradient;
+pub mod gauss_seidel;
 
 pub use biconjugate_gradient::solve as solve_biconjugate_gradient;
 

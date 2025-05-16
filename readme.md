@@ -36,6 +36,16 @@ let result = solve(&a, &b, 100, 1e-10);
 assert!(result.is_some());
 ```
 
+```rust
+use nalgebra_sparse::{na::DVector, CsrMatrix};
+use nalgebra_sparse_linalg::iteratives::gagauss_seideluss::solve;
+
+let a = CsrMatrix::identity(3);
+let b = DVector::from_vec(vec![1.0; 3]);
+let result = solve(&a, &b, 100, 1e-10);
+assert!(result.is_some());
+```
+
 Example (Conjugate Gradient, CSC or CSR):
 
 ```rust

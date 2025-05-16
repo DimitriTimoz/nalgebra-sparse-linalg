@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use nalgebra_sparse::na::DVector;
 use nalgebra_sparse::CsrMatrix;
-use nalgebra_sparse_linalg::iteratives::{biconjugate_gradient, conjugate_gradient, jacobi, SpMatVecMul};
+use nalgebra_sparse_linalg::iteratives::{biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, SpMatVecMul};
 use rand::{rng, Rng};
 use rand::seq::SliceRandom;
 
@@ -65,7 +65,7 @@ fn generate_spd(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
     };
     let at = base.transpose();
     let ata = &at * &base;
-    let alpha: f64 = 10.0;
+    let alpha: f64 = 5.0;
     let identity = CsrMatrix::identity(size) * alpha;
     &ata + &identity
 }
@@ -102,6 +102,24 @@ fn bench_methods(c: &mut Criterion) {
                 BatchSize::LargeInput,
             );
         });
+        
+// Gauss-Seidel : méthode itérative pour résoudre Ax = b, améliore Jacobi en utilisant les valeurs déjà calculées dans la même itération. Converge plus rapidement pour les matrices symétriques définies positives ou strictement diagonales dominantes.
+        group.bench_with_input(BenchmarkId::new("GaussSeidel", n), &n, |be, &_n| {
+            be.iter_batched(
+                || {
+                    let a = generate_spd(n, nnz);
+                    let mut rng = rng();
+                    let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
+                    let b = a.mul_vec(&x);
+                    (a, b)
+                },
+                |(a, b)| {
+                    let r = gauss_seidel::solve(&a, &b, 100_000, 1e-10);
+                    assert!(r.is_some());
+                },
+                BatchSize::LargeInput,
+            );
+        });
 
         group.bench_with_input(BenchmarkId::new("ConjugateGradient", n), &n, |be, &_n| {
             be.iter_batched(
@@ -113,7 +131,7 @@ fn bench_methods(c: &mut Criterion) {
                     (a, b)
                 },
                 |(a, b)| {
-                    let r = conjugate_gradient::solve(&a, &b, 10_000, 1e-10);
+                    let r = conjugate_gradient::solve(&a, &b, 100_000, 1e-10);
                     assert!(r.is_some());
                 },
                 BatchSize::LargeInput,
@@ -130,7 +148,7 @@ fn bench_methods(c: &mut Criterion) {
                     (a, b)
                 },
                 |(a, b)| {
-                    let r = biconjugate_gradient::solve(&a, &b, 10_000, 1e-10);
+                    let r = biconjugate_gradient::solve(&a, &b, 100_000, 1e-10);
                     assert!(r.is_some());
                 },
                 BatchSize::LargeInput,

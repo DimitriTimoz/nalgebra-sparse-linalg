@@ -66,7 +66,7 @@ where
         });
         x = new_x.clone();
         if norm <= tol {
-            return Some(new_x);
+            return Some(x);
         }
     }
     None
