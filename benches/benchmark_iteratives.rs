@@ -4,6 +4,7 @@ use nalgebra_sparse::CsrMatrix;
 use nalgebra_sparse_linalg::iteratives::{biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, SpMatVecMul};
 use rand::{rng, Rng};
 use rand::seq::SliceRandom;
+use std::env;
 
 /// Random sparse triplet (CSR parts) – guarantees **unique, sorted** col indices
 fn random_sparse_triplet(size: usize, nnz_per_row: usize) -> (Vec<usize>, Vec<usize>, Vec<f64>) {
@@ -79,82 +80,88 @@ fn generate_nonsymmetric(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
 
 // Benchmarks ---------------------------------------------------------------
 fn bench_methods(c: &mut Criterion) {
-
+    // Allow filtering which method to run via BENCH_METHOD env variable
+    let bench_method = env::var("BENCH_METHOD").ok();
     let mut group = c.benchmark_group("IterativeSolvers");
-    
     let sizes = [100usize, 500, 1_000,2_000, 10_000];//, 10_000, 50_000, 100_000, 200_000];
-
     for &n in &sizes {
         let nnz = n.min(50) / 5;
-
-        group.bench_with_input(BenchmarkId::new("Jacobi", n), &n, |be, &_n| {
-            be.iter_batched(
-                || {
-                    let a = generate_spd(n, nnz);
-                    let mut rng = rng();
-                    let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
-                    let b = a.mul_vec(&x);
-                    (a, b)
-                },
-                |(a, b)| {
-                    let r = jacobi::solve(&a, &b, 100_000, 1e-10);
-                    assert!(r.is_some());
-                },
-                BatchSize::LargeInput,
-            );
-        });
-        
-// Gauss-Seidel : méthode itérative pour résoudre Ax = b, améliore Jacobi en utilisant les valeurs déjà calculées dans la même itération. Converge plus rapidement pour les matrices symétriques définies positives ou strictement diagonales dominantes.
-        group.bench_with_input(BenchmarkId::new("GaussSeidel", n), &n, |be, &_n| {
-            be.iter_batched(
-                || {
-                    let a = generate_spd(n, nnz);
-                    let mut rng = rng();
-                    let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
-                    let b = a.mul_vec(&x);
-                    (a, b)
-                },
-                |(a, b)| {
-                    let r = gauss_seidel::solve(&a, &b, 100_000, 1e-10);
-                    assert!(r.is_some());
-                },
-                BatchSize::LargeInput,
-            );
-        });
-
-        group.bench_with_input(BenchmarkId::new("ConjugateGradient", n), &n, |be, &_n| {
-            be.iter_batched(
-                || {
-                    let a = generate_spd(n, nnz);
-                    let mut rng = rng();
-                    let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
-                    let b = a.mul_vec(&x);
-                    (a, b)
-                },
-                |(a, b)| {
-                    let r = conjugate_gradient::solve(&a, &b, 100_000, 1e-10);
-                    assert!(r.is_some());
-                },
-                BatchSize::LargeInput,
-            );
-        });
-
-        group.bench_with_input(BenchmarkId::new("BiConjugateGradient", n), &n, |be, &_n| {
-            be.iter_batched(
-                || {
-                    let a = generate_spd(n, nnz);
-                    let mut rng = rng();
-                    let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
-                    let b = a.mul_vec(&x);
-                    (a, b)
-                },
-                |(a, b)| {
-                    let r = biconjugate_gradient::solve(&a, &b, 100_000, 1e-10);
-                    assert!(r.is_some());
-                },
-                BatchSize::LargeInput,
-            );
-        });
+        // Only run Jacobi if BENCH_METHOD is unset or matches
+        if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("jacobi")) {
+            group.bench_with_input(BenchmarkId::new("Jacobi", n), &n, |be, &_n| {
+                be.iter_batched(
+                    || {
+                        let a = generate_spd(n, nnz);
+                        let mut rng = rng();
+                        let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
+                        let b = a.mul_vec(&x);
+                        (a, b)
+                    },
+                    |(a, b)| {
+                        let r = jacobi::solve(&a, &b, 100_000, 1e-10);
+                        assert!(r.is_some());
+                    },
+                    BatchSize::LargeInput,
+                );
+            });
+        }
+        // Only run GaussSeidel if BENCH_METHOD is unset or matches
+        if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("gaussseidel")) {
+            group.bench_with_input(BenchmarkId::new("GaussSeidel", n), &n, |be, &_n| {
+                be.iter_batched(
+                    || {
+                        let a = generate_spd(n, nnz);
+                        let mut rng = rng();
+                        let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
+                        let b = a.mul_vec(&x);
+                        (a, b)
+                    },
+                    |(a, b)| {
+                        let r = gauss_seidel::solve(&a, &b, 100_000, 1e-10);
+                        assert!(r.is_some());
+                    },
+                    BatchSize::LargeInput,
+                );
+            });
+        }
+        // Only run ConjugateGradient if BENCH_METHOD is unset or matches
+        if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("conjugategradient")) {
+            group.bench_with_input(BenchmarkId::new("ConjugateGradient", n), &n, |be, &_n| {
+                be.iter_batched(
+                    || {
+                        let a = generate_spd(n, nnz);
+                        let mut rng = rng();
+                        let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
+                        let b = a.mul_vec(&x);
+                        (a, b)
+                    },
+                    |(a, b)| {
+                        let r = conjugate_gradient::solve(&a, &b, 100_000, 1e-10);
+                        assert!(r.is_some());
+                    },
+                    BatchSize::LargeInput,
+                );
+            });
+        }
+        // Only run BiConjugateGradient if BENCH_METHOD is unset or matches
+        if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("biconjugategradient")) {
+            group.bench_with_input(BenchmarkId::new("BiConjugateGradient", n), &n, |be, &_n| {
+                be.iter_batched(
+                    || {
+                        let a = generate_spd(n, nnz);
+                        let mut rng = rng();
+                        let x = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
+                        let b = a.mul_vec(&x);
+                        (a, b)
+                    },
+                    |(a, b)| {
+                        let r = biconjugate_gradient::solve(&a, &b, 100_000, 1e-10);
+                        assert!(r.is_some());
+                    },
+                    BatchSize::LargeInput,
+                );
+            });
+        }
     }
     group.finish();
 }
