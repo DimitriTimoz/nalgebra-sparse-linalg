@@ -1,26 +1,55 @@
-use nalgebra_sparse::CooMatrix;
 use num_traits::Float;
 
 use super::{super::*, graph::strength_graph};
 
-pub fn coarsen<T>(a: &CsrMatrix<T>, theta: T) -> CooMatrix<T> 
+#[derive(Clone, Copy)]
+enum Mark {
+    Unmarked,
+    C, // High degree
+    F, //High neighbor 
+}
+
+
+struct Node {
+    index: usize,
+    degree: usize,
+}
+impl Node {
+    fn new(index: usize, degree: usize) -> Self {
+        Node { index, degree }
+    }
+}
+pub fn coarsen<T>(a: &CsrMatrix<T>, theta: T) -> Vec<Mark>
 where 
     T: Float,
 {
-    let f = strength_graph(a, theta);
-    let mut coarsened = CooMatrix::new(a.nrows(), a.ncols());
+    let mut marks = vec![Mark::Unmarked; a.nrows()];
+
+    let graph = strength_graph(a, theta);
     // Compute the degrees of the rows
-    let mut nodes = vec![(0, 0usize, false); a.nrows()];
+    let mut nodes = Vec::with_capacity(a.nrows());
     for (row_i, row) in a.row_iter().enumerate() {
-        nodes[row_i] = (row_i, row.nnz(), false);
+        nodes[row_i] = Node {
+            index: row_i,
+            degree: row.col_indices().len()
+        }
     }
 
-    nodes.sort_by(|a, b| b.1.cmp(&a.1)); //TODO If failed be sure to check the sort order
+    nodes.sort_by(|a, b| b.degree.cmp(&a.degree)); //TODO If failed be sure to check the sort order
     // Select the coarsening strategy
-    let mut current_index = 0;
-    while true {
-        let node = nodes[current_index];
-
+    for node in nodes.iter_mut() {
+        if !matches!(marks[node.index], Mark::Unmarked) {
+            continue;
+        }
+        // Mark the node as C
+        marks[node.index] = Mark::C;
+        // Mark all neighbors as F
+        for neighbor in graph[node.index].iter() {
+            if matches!(marks[*neighbor], Mark::Unmarked) {
+                marks[*neighbor] = Mark::F;
+            }
+        }
     }
-    coarsened
+    
+    marks
 }
