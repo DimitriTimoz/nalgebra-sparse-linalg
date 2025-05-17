@@ -23,7 +23,7 @@ where
     let graph = strength_graph(a, theta);
     // Compute the degrees of the rows
     let mut nodes = Vec::with_capacity(a.nrows());
-    for (row_i, row) in a.row_iter().enumerate() {
+    for row_i in 0..n {
         nodes[row_i] = Node {
             index: row_i,
             degree: graph[row_i].len(),
@@ -52,6 +52,5 @@ where
             }
         }
     }
-    
     (marks, coarse_of)
 }
