@@ -62,7 +62,7 @@ use super::*;
 /// ```
 pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
-    T: SimdRealField + PartialOrd + Send + Sync
+    T: SimdRealField + PartialOrd + Send + Sync + Copy
 {
     let mut x = DVector::<T>::zeros(a.nrows());
     if solve_with_initial_guess(a, b, &mut x, max_iter, tol) {
@@ -130,11 +130,11 @@ where
 /// ```
 pub fn solve_with_initial_guess<T>(a: &CsrMatrix<T>, b: &DVector<T>, x: &mut DVector<T>, max_iter: usize, tol: T) -> bool
 where 
-    T: SimdRealField + PartialOrd + Send + Sync
+    T: SimdRealField + PartialOrd + Send + Sync + Copy
 {
     let mut new_x = x.clone();
     let n = a.nrows();
-    let use_parallel = n >= 10_000;
+    let use_parallel = a.nnz() >= 50_000;
     for _ in 0..max_iter {
         if use_parallel {
             new_x.as_mut_slice()
@@ -142,12 +142,12 @@ where
                 .enumerate()
                 .for_each(|(row_i, new_x_i)| {
                     if let Some(row) = a.get_row(row_i) {
-                        let mut sigma = b[row_i].clone();
+                        let mut sigma = b[row_i];
                         let col_indices = row.col_indices();
                         let values = row.values();
                         for (col_i, value) in col_indices.iter().zip(values.iter()) {
                             if *col_i != row_i {
-                                sigma -= value.clone() * x[*col_i].clone();
+                                sigma -= *value * x[*col_i];
                             }
                         }
                         let diag = a.get_entry(row_i, row_i).map(|v| v.into_value());
@@ -165,12 +165,12 @@ where
         } else {
             for row_i in 0..a.nrows() {
                 if let Some(row) = &a.get_row(row_i) {
-                    let mut sigma = b[row_i].clone();
+                    let mut sigma = b[row_i];
                     let col_indices = row.col_indices();
                     let values = row.values();
                     for (col_i, value) in col_indices.iter().zip(values.iter()) {
                         if *col_i != row_i {
-                            sigma -= value.clone() * x[*col_i].clone();
+                            sigma -= *value * x[*col_i];
                         }
                     }
                     let diag = a.get_entry(row_i, row_i).map(|v| v.into_value());
@@ -187,11 +187,11 @@ where
         }
         let norm = if use_parallel {
             (0..n).into_par_iter()
-                .map(|i| (x[i].clone() - new_x[i].clone()).simd_norm1())
+                .map(|i| (x[i] - new_x[i]).simd_norm1())
                 .reduce(|| T::zero(), |a, b| a + b)
         } else {
             x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
-                m + (x_i.clone() - new_x_i.clone()).simd_norm1()
+                m + (*x_i - *new_x_i).simd_norm1()
             })
         };
         std::mem::swap(x, &mut new_x);

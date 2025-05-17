@@ -53,7 +53,7 @@ use super::*;
 pub fn solve<M, T>(a: &M, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
     M: SpMatVecMul<T>,
-    T: SimdRealField + PartialOrd
+    T: SimdRealField + PartialOrd + Copy
 {
     let mut x = DVector::<T>::zeros(a.nrows());
     if solve_with_initial_guess(a, b, &mut x, max_iter, tol) {
@@ -83,7 +83,7 @@ where
 pub fn solve_with_initial_guess<M, T>(a: &M, b: &DVector<T>,  x: &mut DVector<T>, max_iter: usize, tol: T) -> bool
 where 
     M: SpMatVecMul<T>,
-    T: SimdRealField + PartialOrd
+    T: SimdRealField + PartialOrd + Copy
 {
     let mut residual = b - &a.mul_vec(x);
     let mut residual_dot = residual.dot(&residual);
@@ -95,8 +95,8 @@ where
     let mut p = residual.clone();
     for _ in 0..max_iter {
         let ap = a.mul_vec(&p);
-        let alpha = residual_dot.clone() / p.dot(&ap);
-        x.axpy(alpha.clone(), &p, T::one());
+        let alpha = residual_dot / p.dot(&ap);
+        x.axpy(alpha, &p, T::one());
         let new_residual = &residual - &ap * alpha;
         
         // Check for convergence
@@ -105,7 +105,7 @@ where
             return true
         }
         let new_residual_dot = new_residual.dot(&new_residual);
-        let beta = new_residual_dot.clone() / residual_dot;
+        let beta = new_residual_dot / residual_dot;
         residual_dot = new_residual_dot;
         p = &new_residual + &p * beta;
         residual = new_residual;
