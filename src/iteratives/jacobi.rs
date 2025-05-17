@@ -135,6 +135,15 @@ where
     let mut new_x = x.clone();
     let n = a.nrows();
     let use_parallel = a.nnz() >= 50_000;
+    let inv_diag = a.diagonal_as_csr().triplet_iter_mut()
+        .map(|(_, _, v)| {
+            if *v < tol {
+                T::zero()
+            } else {
+                T::one() / *v
+            }
+        }).collect::<Vec<_>>();
+        
     for _ in 0..max_iter {
         if use_parallel {
             new_x.as_mut_slice()
@@ -150,12 +159,11 @@ where
                                 sigma -= *value * x[*col_i];
                             }
                         }
-                        let diag = a.get_entry(row_i, row_i).map(|v| v.into_value());
-                        if let Some(diag) = diag {
-                            if diag < tol {
+                        if let Some(diag) = inv_diag.get(row_i) {
+                            if diag < &tol {
                                 *new_x_i = T::zero();
                             } else {
-                                *new_x_i = sigma / diag;
+                                *new_x_i = sigma * *diag;
                             }
                         } else {
                             *new_x_i = T::zero();
@@ -173,29 +181,25 @@ where
                             sigma -= *value * x[*col_i];
                         }
                     }
-                    let diag = a.get_entry(row_i, row_i).map(|v| v.into_value());
+                    let diag = inv_diag.get(row_i);
                     let diag = match diag {
                         Some(diag) => diag,
                         None => return false,
                     };
-                    if diag < tol {
+                    if diag < &tol {
                         return false;
                     }
-                    new_x[row_i] = sigma / diag;
+                    new_x[row_i] = sigma * *diag;
                 }
             }
         }
-        let norm = if use_parallel {
-            (0..n).into_par_iter()
-                .map(|i| (x[i] - new_x[i]).simd_norm1())
-                .reduce(|| T::zero(), |a, b| a + b)
-        } else {
-            x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
-                m + (*x_i - *new_x_i).simd_norm1()
-            })
-        };
+        let norm_inf = (0..n)
+            .map(|i| (x[i] - new_x[i]).simd_abs())
+            .reduce( |a, b| if a > b { a } else { b }).unwrap_or(T::zero());
+
+
         std::mem::swap(x, &mut new_x);
-        if norm <= tol {
+        if norm_inf <= tol {
             return true;
         }
     }
