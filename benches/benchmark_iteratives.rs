@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, PlotConfiguration};
 use nalgebra_sparse::na::DVector;
 use nalgebra_sparse::CsrMatrix;
 use nalgebra_sparse_linalg::iteratives::{biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation, SpMatVecMul};
@@ -83,9 +83,10 @@ fn bench_methods(c: &mut Criterion) {
     // Allow filtering which method to run via BENCH_METHOD env variable
     let bench_method = env::var("BENCH_METHOD").ok();
     let mut group = c.benchmark_group("IterativeSolvers");
-    let sizes = [100usize, 500, 1_000,2_000, 10_000];//, 10_000, 50_000, 100_000, 200_000];
+    group.plot_config(PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic));
+    let sizes = [100usize, 1_000, 10_000];//, 10_000, 50_000, 100_000, 200_000];
     for &n in &sizes {
-        let nnz = n.min(50) / 5;
+        let nnz = n.min(50) / 10;
         // Only run Jacobi if BENCH_METHOD is unset or matches
         if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("jacobi")) {
             group.bench_with_input(BenchmarkId::new("Jacobi", n), &n, |be, &_n| {
@@ -185,5 +186,17 @@ fn bench_methods(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_methods);
+fn config() -> Criterion {
+    Criterion::default()
+        .sample_size(10) // reduce number of samples
+        .warm_up_time(std::time::Duration::from_millis(10))
+        .nresamples(10)
+}
+
+criterion_group!{
+    name = benches;
+    config = config();
+    targets = bench_methods
+}
+
 criterion_main!(benches);
