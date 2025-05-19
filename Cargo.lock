@@ -319,7 +319,6 @@ dependencies = [
  "criterion",
  "log",
  "nalgebra-sparse",
- "num-traits",
  "rand",
  "rayon",
 ]

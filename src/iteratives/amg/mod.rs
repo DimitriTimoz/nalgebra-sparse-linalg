@@ -1,4 +1,5 @@
 // https://edoc.unibas.ch/server/api/core/bitstreams/d56e8bdd-9b91-49ec-a8f5-04eff6db51ca/content
+use super::*;
 
 pub mod cycle;
 pub mod graph;
@@ -8,6 +9,20 @@ pub mod restrict;
 pub mod smooth;
 pub mod level;
 
+pub(crate) fn rap<N>(
+    r: &CsrMatrix<N>,
+    a: &CsrMatrix<N>,
+    p: &CsrMatrix<N>,
+) -> CsrMatrix<N>
+where
+    N: RealField + Copy,
+{
+    // 1. C = A * P   (CSR × CSR)
+    let c = a * p;
+
+    // 2. A_c = R * C
+    r * &c
+}
 
 #[cfg(test)]
 mod tests {

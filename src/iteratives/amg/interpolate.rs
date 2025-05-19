@@ -1,7 +1,4 @@
-use std::ops::AddAssign;
-
-use nalgebra_sparse::CooMatrix;
-use num_traits::Float;
+use nalgebra_sparse::{na::RealField, CooMatrix};
 use super::{super::*, coarsen::Mark};
 
 pub(crate) fn build_p<N>(
@@ -11,7 +8,7 @@ pub(crate) fn build_p<N>(
     s: &[Vec<usize>],
 ) -> CsrMatrix<N>
 where
-    N: Float + std::fmt::Debug + AddAssign + 'static,
+    N: RealField + Copy
 {
     let n = a.nrows();
     let n_coarse = coarse_of.iter().filter(|&&c| c != usize::MAX).count();

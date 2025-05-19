@@ -1,11 +1,7 @@
-use std::{fmt::Debug, ops::{AddAssign, MulAssign, SubAssign}};
-
-use num_traits::Float;
-
 use super::super::*;
 
 fn build_r<N>(a: &CsrMatrix<N>, p: &CsrMatrix<N>) -> CsrMatrix<N>
-where N: Float + Debug + 'static + AddAssign + SubAssign + MulAssign
+where N: RealField + Copy
 {
     let n = a.nrows();
     let mut d_inv = Vec::with_capacity(n);

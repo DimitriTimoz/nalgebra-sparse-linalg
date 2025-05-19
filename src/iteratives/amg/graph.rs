@@ -1,10 +1,8 @@
-use num_traits::Float;
-
 use super::super::*;
 
 pub(crate) fn strength_graph<T>(a: &CsrMatrix<T>, theta: T) -> Vec<Vec<usize>>
 where
-    T: Float
+    T: RealField + Copy
 {
     (0..a.nrows()).map(|i| {
         let row = a.get_row(i);

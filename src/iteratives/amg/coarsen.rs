@@ -1,5 +1,3 @@
-use num_traits::Float;
-
 use super::{super::*, graph::strength_graph};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -17,7 +15,7 @@ struct Node {
 
 pub(crate) fn coarsen<T>(a: &CsrMatrix<T>, theta: T) -> (Vec<Mark>, Vec<usize>)
 where 
-    T: Float,
+    T: RealField + Copy,
 {
     let n = a.nrows();
     let graph = strength_graph(a, theta);
