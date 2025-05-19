@@ -26,11 +26,19 @@ where
         let r = build_p(&a, &marks, &coarse_of, &s);
         let diag   = a.diagonal_as_csr();
 
-        levels.push(Level { a: a.clone(), p: p.clone(), r, diag });
+        if a.nrows() <= n_min {
+            levels.push(Level { a: a.clone(),
+                                p,
+                                r,
+                                diag});
+            break;
+        }
 
-        if a.nrows() <= n_min { break; }
+        println!("Level {}: {} rows", levels.len(), a.nrows());
+        levels.push(Level { a: a.clone(), p: p.clone(), r: r.clone(), diag: diag.clone() });
         a = rap(&levels.last().unwrap().r, &a, &p);
     }
+    println!("Setup done");
     Hierarchy { levels }
 }
 
@@ -73,5 +81,6 @@ impl<N: RealField + Copy> Hierarchy<N> {
 
         // post-smooth (backward)
         gauss_seidel::solve_with_initial_guess(&lev.a, b, x, nu_post, tol);
+        println!("Last iteration residual: {}", tmp.amax());
     }
 }

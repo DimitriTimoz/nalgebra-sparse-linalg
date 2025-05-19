@@ -2,8 +2,9 @@
 
 use nalgebra_sparse::{na::DVector, CsrMatrix};
 use nalgebra_sparse_linalg::iteratives::{
-    jacobi, gauss_seidel, relaxation, conjugate_gradient, biconjugate_gradient
+    amg, biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation
 };
+use nalgebra_sparse_linalg::iteratives::amg::level::setup;
 
 fn get_identity_and_rhs(n: usize, rhs_val: f64) -> (CsrMatrix<f64>, DVector<f64>) {
     (CsrMatrix::identity(n), DVector::from_vec(vec![rhs_val; n]))
@@ -216,4 +217,24 @@ fn test_conjugate_gradient_sdp() {
     let result = conjugate_gradient::solve(&a, &b, 1000, 1e-8);
     assert!(result.is_some());
     assert!((result.unwrap() - x_true).amax() < 1e-6);
+}
+
+#[test]
+fn test_amg() {
+    let (a, b, x_true) = get_sdp_matrix();
+    let n = a.nrows();
+    let mut x = DVector::zeros(n);
+    let mut tmp = DVector::zeros(n);
+    let tol = 1e-8;
+    let nu_pre = 2;
+    let nu_post = 2;
+    let max_iter = 1000;
+
+    // Create a hierarchy with a single level
+    let hierarchy = setup(a.clone(), 0.0, 1);
+
+    // Perform V-cycle
+    hierarchy.vcycle(0, &b, &mut x, &mut tmp, tol, nu_pre, nu_post);
+
+    assert!((x - x_true).amax() < tol);
 }
