@@ -22,7 +22,7 @@ where
     let n = a.nrows();
     let graph = strength_graph(a, theta);
     // Compute the degrees of the rows
-    let mut nodes = Vec::with_capacity(a.nrows());
+    let mut nodes = vec![Node { index: 0, degree: 0 }; n];
     for row_i in 0..n {
         nodes[row_i] = Node {
             index: row_i,

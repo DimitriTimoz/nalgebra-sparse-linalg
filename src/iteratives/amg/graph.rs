@@ -20,7 +20,6 @@ where
                 r
             },
             None => vec![],
-            
         }
     }).collect()
 }

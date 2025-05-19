@@ -315,6 +315,7 @@ dependencies = [
 name = "nalgebra-sparse-linalg"
 version = "0.1.5"
 dependencies = [
+ "approx",
  "criterion",
  "log",
  "nalgebra-sparse",
