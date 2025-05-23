@@ -5,7 +5,6 @@ use nalgebra_sparse_linalg::iteratives::amg::solve_with_initial_guess;
 use nalgebra_sparse_linalg::iteratives::{
     biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation
 };
-use nalgebra_sparse_linalg::iteratives::amg::level::setup;
 use rand::{rng, Rng};
 
 fn get_identity_and_rhs(n: usize, rhs_val: f64) -> (CsrMatrix<f64>, DVector<f64>) {
