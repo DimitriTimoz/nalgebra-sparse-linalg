@@ -16,27 +16,46 @@ pub(crate) fn rap<N>(
 where
     N: RealField + Copy,
 {
-    // 1. C = A * P   (CSR × CSR)
-    let c = a * p;
-
-    // 2. A_c = R * C
-    r * &c
+    // Optimized triple product: R * A * P
+    // First compute A * P (often much smaller than computing R * A first)
+    let ap = a * p;
+    // Then compute R * (A * P)
+    r * &ap
 }
 
-pub fn solve_with_initial_guess<T>(a: CsrMatrix<T>, b: &DVector<T>,  x: &mut DVector<T>, max_iter: usize, tol: T, theta: T) -> bool
+pub fn solve_with_initial_guess<T>(a: CsrMatrix<T>, b: &DVector<T>, x: &mut DVector<T>, max_iter: usize, tol: T, theta: T) -> bool
 where 
     T: RealField + Copy,
 {
     use level::*;
     
-    let mut tmp = DVector::from(&a * &*x - b);
-    //println!("Setting up AMG");
-    let hierachy = setup(a, theta, 100);
-    //println!("Setup done");
+    // Pre-compute initial residual
+    let mut residual_buffer = DVector::from(&a * &*x - b);
+    let hierarchy = setup(a, theta, 100);
+    
+    // Check if we're already converged
+    let initial_residual_norm = residual_buffer.amax();
+    if initial_residual_norm <= tol {
+        return true;
+    }
+    
+    // Use adaptive tolerance for intermediate iterations
+    let adaptive_tol = tol.max(initial_residual_norm * T::from_f64(1e-3).unwrap());
+    
     for i in 0..max_iter {
-        hierachy.vcycle(0, b, x, &mut tmp, tol, 2, 2);
-        if tmp.max() <= tol {
-            return true;
+        hierarchy.vcycle(0, b, x, &mut residual_buffer, adaptive_tol, 1, 1);
+        
+        // Check convergence every few iterations to reduce overhead
+        if i % 5 == 4 || i == max_iter - 1 {
+            let residual_norm = residual_buffer.amax();
+            if residual_norm <= tol {
+                return true;
+            }
+            
+            // Optional: print progress less frequently
+            if i % 20 == 19 {
+                println!("Iteration {}: max residual norm = {}", i + 1, residual_norm);
+            }
         }
     }
     false

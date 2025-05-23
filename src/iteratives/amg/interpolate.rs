@@ -14,6 +14,9 @@ where
     let n_coarse = coarse_of.iter().filter(|&&c| c != usize::MAX).count();
 
     let mut trip = CooMatrix::new(n, n_coarse);
+    // Pre-estimate capacity to reduce reallocations
+    let estimated_nnz = n + (n - n_coarse) * 3; // Rough estimate
+    trip.reserve(estimated_nnz);
 
     for i in 0..n {
         match marks[i] {
@@ -22,7 +25,7 @@ where
                 trip.push(i, j, N::one());
             }
             Mark::F => {
-                // C strength graph
+                // Find C-point neighbors in the strength graph
                 let c_neighbors: Vec<usize> = s[i]
                     .iter()
                     .copied()
@@ -30,28 +33,45 @@ where
                     .collect();
 
                 if c_neighbors.is_empty() {
-                    // If an F-point has no C-neighbors in its strong connections,
-                    // connect it to the first coarse point (index 0) as a fallback.
-                    // This requires that there is at least one coarse point (trip.ncols() > 0).
-                    if trip.ncols() > 0 {
+                    // Fallback: connect to first coarse point if available
+                    if n_coarse > 0 {
                         trip.push(i, 0, N::one());
                     }
                     continue;
                 }
 
-                // Compute weights w_{ij} = -a_ij / a_ii
-                let diag = a.get_entry(i, i).unwrap_or(nalgebra_sparse::SparseEntry::NonZero(&N::one())).into_value();
-                for &nbr in &c_neighbors {
-                    if let Some(a_ij) = a.get_entry(i, nbr) {
-                        let w = -a_ij.into_value() / diag;
-                        let col = coarse_of[nbr];
-                        trip.push(i, col, w);
+                // Compute interpolation weights
+                if let Some(diag_entry) = a.get_entry(i, i) {
+                    let diag = diag_entry.into_value();
+                    let mut weight_sum = N::zero();
+                    
+                    // First pass: compute weights
+                    let mut weights = Vec::with_capacity(c_neighbors.len());
+                    for &nbr in &c_neighbors {
+                        if let Some(a_ij) = a.get_entry(i, nbr) {
+                            let w = -a_ij.into_value() / diag;
+                            weights.push((coarse_of[nbr], w));
+                            weight_sum += w;
+                        }
+                    }
+                    
+                    // Normalize weights to sum to 1 for better stability
+                    if weight_sum != N::zero() {
+                        for (col, w) in weights {
+                            trip.push(i, col, w / weight_sum);
+                        }
+                    } else {
+                        // Fallback: equal weights
+                        let equal_weight = N::one() / N::from_usize(c_neighbors.len()).unwrap();
+                        for &nbr in &c_neighbors {
+                            trip.push(i, coarse_of[nbr], equal_weight);
+                        }
                     }
                 }
-                // TODO: normalize weights
             }
-            Mark::Unmarked => unreachable!(),
+            Mark::Unmarked => unreachable!("All points should be marked during coarsening"),
         }
     }
+    
     CsrMatrix::from(&trip)
 }

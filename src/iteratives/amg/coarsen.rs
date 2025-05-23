@@ -19,36 +19,42 @@ where
 {
     let n = a.nrows();
     let graph = strength_graph(a, theta);
-    // Compute the degrees of the rows
-    let mut nodes = vec![Node { index: 0, degree: 0 }; n];
-    for row_i in 0..n {
-        nodes[row_i] = Node {
-            index: row_i,
-            degree: graph[row_i].len(),
-        }
-    }
+    
+    // Create nodes with degrees in one pass, avoiding indexing
+    let mut nodes: Vec<Node> = graph.iter()
+        .enumerate()
+        .map(|(index, neighbors)| Node {
+            index,
+            degree: neighbors.len(),
+        })
+        .collect();
 
-    nodes.sort_by(|a, b| b.degree.cmp(&a.degree)); //TODO If failed be sure to check the sort order
-    // Select the coarsening strategy
+    // Sort by degree (descending) - this is the correct order for Ruge-Stüben
+    nodes.sort_unstable_by(|a, b| b.degree.cmp(&a.degree));
+    
+    // Pre-allocate marking vectors
     let mut marks = vec![Mark::Unmarked; n];
-    let mut coarse_of  = vec![usize::MAX; n];
-
+    let mut coarse_of = vec![usize::MAX; n];
     let mut next_coarse = 0usize;
 
-    for node in nodes.iter_mut() {
+    // Ruge-Stüben coarsening algorithm
+    for node in &nodes {
         if marks[node.index] != Mark::Unmarked {
             continue;
         }
-        // Mark the node as C
+        
+        // Mark the node as C (coarse)
         marks[node.index] = Mark::C;
         coarse_of[node.index] = next_coarse;
         next_coarse += 1;
-        // Mark all neighbors as F
-        for neighbor in graph[node.index].iter() {
-            if matches!(marks[*neighbor], Mark::Unmarked) {
-                marks[*neighbor] = Mark::F;
+        
+        // Mark all strong neighbors as F (fine)
+        for &neighbor in &graph[node.index] {
+            if matches!(marks[neighbor], Mark::Unmarked) {
+                marks[neighbor] = Mark::F;
             }
         }
     }
+    
     (marks, coarse_of)
 }

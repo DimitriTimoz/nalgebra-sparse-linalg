@@ -6,6 +6,7 @@ use nalgebra_sparse_linalg::iteratives::{
     biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation
 };
 use nalgebra_sparse_linalg::iteratives::amg::level::setup;
+use rand::{rng, Rng};
 
 fn get_identity_and_rhs(n: usize, rhs_val: f64) -> (CsrMatrix<f64>, DVector<f64>) {
     (CsrMatrix::identity(n), DVector::from_vec(vec![rhs_val; n]))
@@ -61,7 +62,7 @@ fn get_sdp_matrix() -> (CsrMatrix<f64>, DVector<f64>, DVector<f64>) {
 }
 
 fn get_very_large_sparse_matrix() -> (CsrMatrix<f64>, DVector<f64>, DVector<f64>) {
-    let n = 100; // Size of the matrix
+    let n = 1000; // Size of the matrix
     let mut row_offsets = Vec::with_capacity(n + 1);
     let mut col_indices = Vec::new();
     let mut values = Vec::new();
@@ -91,9 +92,9 @@ fn get_very_large_sparse_matrix() -> (CsrMatrix<f64>, DVector<f64>, DVector<f64>
         }
         row_offsets.push(nnz);
     }
-
+    let mut rng = rng();
     let a = CsrMatrix::try_from_csr_data(n, n, row_offsets, col_indices, values).unwrap();
-    let x_true = DVector::from_element(n, 1.0); // True solution vector of ones
+    let x_true = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
     let b = &a * &x_true; // Calculate RHS vector b = A * x_true
     (a, b, x_true)
 }

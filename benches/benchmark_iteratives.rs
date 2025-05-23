@@ -66,7 +66,7 @@ fn generate_spd(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
     };
     let at = base.transpose();
     let ata = &at * &base;
-    let alpha: f64 = 5.0;
+    let alpha: f64 = 4.0;
     let identity = CsrMatrix::identity(size) * alpha;
     &ata + &identity
 }
