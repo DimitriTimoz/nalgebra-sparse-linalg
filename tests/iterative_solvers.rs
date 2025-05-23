@@ -267,7 +267,6 @@ fn test_amg() {
     let tol = 1e-8;
 
     solve_with_initial_guess(a_orig, &b, &mut x,10000,  tol, 0.8);
-    // Final assertion also needs to clone x if it was moved in the loop, 
-    // or ensure x is still valid here.
+    
     assert!((x - &x_true).amax() < tol);
 }
