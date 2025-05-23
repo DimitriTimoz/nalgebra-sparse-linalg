@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use nalgebra_sparse::na::DVector;
 use nalgebra_sparse::CsrMatrix;
-use nalgebra_sparse_linalg::iteratives::{amg, biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation, SpMatVecMul};
+use nalgebra_sparse_linalg::iteratives::{amg, biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation};
 use rand::{rng, Rng};
 use rand::seq::SliceRandom;
 use std::env;
