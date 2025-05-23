@@ -41,7 +41,7 @@ where
     T: SimdRealField + PartialOrd + Copy
 {
     let mut x = DVector::<T>::zeros(a.nrows());
-    if solve_with_initial_guess(a, b, &mut x, max_iter, tol) {
+    if solve_with_initial_guess::<M, T, IdentityPreconditioner<M, M>>(a, b, &mut x, max_iter, tol).is_ok() {
         Some(x)
     } else {
         None
@@ -66,10 +66,11 @@ where
 /// # Returns
 /// * `true` - If the method converges to a solution within `max_iter` iterations.
 /// * `false` - If the method does not converge within `max_iter` iterations or encounters a breakdown.
-pub fn solve_with_initial_guess<M, T>(a: &M, b: &DVector<T>,  x: &mut DVector<T>, max_iter: usize, tol: T) -> bool
+pub fn solve_with_initial_guess<M, T, P>(a: &M, b: &DVector<T>,  x: &mut DVector<T>, max_iter: usize, tol: T) -> ConvergedResult
 where 
     M: SpMatVecMul<T>,
-    T: SimdRealField + PartialOrd + Copy
+    T: SimdRealField + PartialOrd + Copy,
+    P: Preconditioner<M, M>
 {
     // Initial residual: r0 = b - A * x0, but x0 = 0 => r0 = b
     let mut residual = b.clone();
@@ -77,13 +78,13 @@ where
 
     let mut residual_dot = residual.dot(&residual_hat_0);
     if residual.clone().magnitude() <= tol {
-        return true;
+        return Ok(Converged)
     }
-
+    let preconditionner = P::build(a).map_err(|_| NotConverged)?;
     let mut p = residual.clone();
     let mut s = DVector::<T>::zeros(a.nrows());
     for _ in 0..max_iter {
-        let mut v = a.mul_vec(&p);
+        let mut v: nalgebra_sparse::na::Matrix<T, nalgebra_sparse::na::Dyn, nalgebra_sparse::na::Const<1>, nalgebra_sparse::na::VecStorage<T, nalgebra_sparse::na::Dyn, nalgebra_sparse::na::Const<1>>> = a.mul_vec(&p);
         let alpha = residual_dot / residual_hat_0.dot(&v);
         x.axpy(alpha, &p, T::one());
         s.copy_from(&residual); 
@@ -91,7 +92,7 @@ where
 
         // Check for convergence
         if s.magnitude() <= tol {
-            return true;
+            return Ok(Converged)
         }
         
         let t = a.mul_vec(&s);
@@ -100,7 +101,7 @@ where
         let new_residual = &s - &t * omega;
         // Check for convergence
         if new_residual.magnitude() <= tol {
-            return true;
+            return Ok(Converged)
         }
         let new_residual_dot = residual_hat_0.dot(&new_residual);
         let beta = (new_residual_dot/residual_dot)*(alpha/omega);
@@ -111,5 +112,5 @@ where
         residual_dot = new_residual_dot;
         residual = new_residual;
     }
-    false
+    Err(NotConverged)
 }

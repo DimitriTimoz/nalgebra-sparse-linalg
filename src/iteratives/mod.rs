@@ -9,6 +9,7 @@ pub use biconjugate_gradient::solve as solve_biconjugate_gradient;
 pub use nalgebra_sparse::{CscMatrix, CsrMatrix};
 pub(crate) use nalgebra_sparse::{na::{DVector, SimdRealField}};
 pub(crate) use rayon::prelude::*;
+pub(crate) use crate::preconditioners::{IdentityPreconditioner, Preconditioner};
 
 pub trait SpMatVecMul<T: SimdRealField + Copy> {
     fn nrows(&self) -> usize;
@@ -34,3 +35,8 @@ impl<T: SimdRealField + Copy> SpMatVecMul<T> for CscMatrix<T> {
         a
     }
 }
+
+pub struct Converged;
+pub struct NotConverged;
+
+type ConvergedResult = Result<Converged, NotConverged>;
