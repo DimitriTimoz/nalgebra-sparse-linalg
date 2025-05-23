@@ -30,9 +30,12 @@ where
                     .collect();
 
                 if c_neighbors.is_empty() {
-                    // promotion in C point for safety
-                    let j = trip.ncols();
-                    trip.push(i, j, N::one());
+                    // If an F-point has no C-neighbors in its strong connections,
+                    // connect it to the first coarse point (index 0) as a fallback.
+                    // This requires that there is at least one coarse point (trip.ncols() > 0).
+                    if trip.ncols() > 0 {
+                        trip.push(i, 0, N::one());
+                    }
                     continue;
                 }
 
@@ -50,6 +53,5 @@ where
             Mark::Unmarked => unreachable!(),
         }
     }
-
     CsrMatrix::from(&trip)
 }

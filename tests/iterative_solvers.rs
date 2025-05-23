@@ -1,8 +1,9 @@
 //! Tests for all iterative solvers in nalgebra-sparse-linalg
 
 use nalgebra_sparse::{na::DVector, CsrMatrix};
+use nalgebra_sparse_linalg::iteratives::amg::solve_with_initial_guess;
 use nalgebra_sparse_linalg::iteratives::{
-    amg, biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation
+    biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation
 };
 use nalgebra_sparse_linalg::iteratives::amg::level::setup;
 
@@ -52,9 +53,48 @@ fn get_sdp_matrix() -> (CsrMatrix<f64>, DVector<f64>, DVector<f64>) {
     let rows = vec![0, 3, 6, 9];
     let cols = vec![0, 1, 2, 0, 1, 2, 0, 1, 2];
     let vals = vec![6.0, 2.0, 1.0, 2.0, 5.0, 2.0, 1.0, 2.0, 4.0];
+    
     let a = CsrMatrix::try_from_csr_data(n, n, rows, cols, vals).unwrap();
     let x_true = DVector::from_vec(vec![1.0, 2.0, 3.0]);
     let b = &a * &x_true;
+    (a, b, x_true)
+}
+
+fn get_very_large_sparse_matrix() -> (CsrMatrix<f64>, DVector<f64>, DVector<f64>) {
+    let n = 100; // Size of the matrix
+    let mut row_offsets = Vec::with_capacity(n + 1);
+    let mut col_indices = Vec::new();
+    let mut values = Vec::new();
+
+    row_offsets.push(0);
+    let mut nnz = 0;
+
+    for i in 0..n {
+        // Add elements for row i
+        if i > 0 {
+            // Element (i, i-1)
+            col_indices.push(i - 1);
+            values.push(-1.0);
+            nnz += 1;
+        }
+
+        // Element (i, i) - Diagonal
+        col_indices.push(i);
+        values.push(3.0); // Ensure diagonal dominance for stability
+        nnz += 1;
+
+        if i < n - 1 {
+            // Element (i, i+1)
+            col_indices.push(i + 1);
+            values.push(-1.0);
+            nnz += 1;
+        }
+        row_offsets.push(nnz);
+    }
+
+    let a = CsrMatrix::try_from_csr_data(n, n, row_offsets, col_indices, values).unwrap();
+    let x_true = DVector::from_element(n, 1.0); // True solution vector of ones
+    let b = &a * &x_true; // Calculate RHS vector b = A * x_true
     (a, b, x_true)
 }
 
@@ -221,20 +261,13 @@ fn test_conjugate_gradient_sdp() {
 
 #[test]
 fn test_amg() {
-    let (a, b, x_true) = get_sdp_matrix();
-    let n = a.nrows();
+    let (a_orig, b, x_true) = get_very_large_sparse_matrix();
+    let n = a_orig.nrows();
     let mut x = DVector::zeros(n);
-    let mut tmp = DVector::zeros(n);
     let tol = 1e-8;
-    let nu_pre = 2;
-    let nu_post = 2;
-    let max_iter = 1000;
 
-    // Create a hierarchy with a single level
-    let hierarchy = setup(a.clone(), 0.0, 1);
-
-    // Perform V-cycle
-    hierarchy.vcycle(0, &b, &mut x, &mut tmp, tol, nu_pre, nu_post);
-
-    assert!((x - x_true).amax() < tol);
+    solve_with_initial_guess(a_orig, &b, &mut x,10000,  tol, 0.8);
+    // Final assertion also needs to clone x if it was moved in the loop, 
+    // or ensure x is still valid here.
+    assert!((x - &x_true).amax() < tol);
 }

@@ -5,17 +5,41 @@ where
     T: RealField + Copy
 {
     (0..a.nrows()).map(|i| {
-        let row = a.get_row(i);
-        match row {
+        let row_view = a.get_row(i);
+        match row_view {
             Some(row) => {
-                let threashold = row.values().iter().map(|v| v.abs()).fold(T::zero(), T::max)*theta;
-                // Filter out the diagonal entry and entries below the threshold
-                let r = row.col_indices()
+                // Find the maximum absolute off-diagonal value in the current row i
+                let mut max_abs_off_diag_val = T::zero();
+                for (col_idx, val) in row.col_indices().iter().zip(row.values().iter()) {
+                    if *col_idx != i { // Exclude diagonal
+                        let abs_val = val.abs();
+                        if abs_val > max_abs_off_diag_val {
+                            max_abs_off_diag_val = abs_val;
+                        }
+                    }
+                }
+
+                // If there are no off-diagonal elements, no strong connections can be formed.
+                if max_abs_off_diag_val == T::zero() {
+                    return vec![];
+                }
+
+                let threshold_val = max_abs_off_diag_val * theta;
+
+                // Filter connections based on the new threshold
+                row.col_indices()
                     .iter()
-                    .cloned()
-                    .filter(|j| *j != i && unsafe {row.get_entry(*j).unwrap_unchecked().into_value().abs() >= threashold})
-                    .collect();
-                r
+                    .zip(row.values().iter())
+                    .filter_map(|(j_idx, val)| {
+                        // Point j is a strong neighbor of i if |a_ij| >= threshold_val
+                        // And j must not be i itself.
+                        if *j_idx != i && val.abs() >= threshold_val {
+                            Some(*j_idx)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
             },
             None => vec![],
         }

@@ -6,7 +6,6 @@ pub mod graph;
 pub mod coarsen;
 pub mod interpolate;
 pub mod restrict;
-pub mod smooth;
 pub mod level;
 
 pub(crate) fn rap<N>(
@@ -24,17 +23,37 @@ where
     r * &c
 }
 
-pub fn solve_with_initial_guess<T>(a: CsrMatrix<T>, b: &DVector<T>,  x: &mut DVector<T>, tol: T, theta: T) -> bool
+pub fn solve_with_initial_guess<T>(a: CsrMatrix<T>, b: &DVector<T>,  x: &mut DVector<T>, max_iter: usize, tol: T, theta: T) -> bool
 where 
     T: RealField + Copy,
 {
     use level::*;
     
     let mut tmp = DVector::from(&a * &*x - b);
-    let hierachy = setup(a, theta, 1);
-    hierachy.vcycle(1, b, x, &mut tmp, tol, 10, 10);
+    //println!("Setting up AMG");
+    let hierachy = setup(a, theta, 100);
+    //println!("Setup done");
+    for i in 0..max_iter {
+        hierachy.vcycle(0, b, x, &mut tmp, tol, 2, 2);
+        if tmp.max() <= tol {
+            return true;
+        }
+    }
     false
 }
+
+pub fn solve<T>(a: CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T, theta: T) -> Option<DVector<T>> 
+where 
+    T: RealField + Copy,
+{
+    let mut x = DVector::<T>::zeros(a.nrows());
+    if solve_with_initial_guess(a, b, &mut x, max_iter, tol, theta) {
+        Some(x)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::iteratives::amg::{coarsen::Mark, graph::strength_graph, interpolate::build_p};
