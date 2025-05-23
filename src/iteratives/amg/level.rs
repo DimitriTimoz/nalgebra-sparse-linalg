@@ -41,7 +41,7 @@ where
             levels.push(Level {
                 a,
                 p: p_candidate,
-                r: r_coarsest.transpose(),
+                r: r_coarsest,
                 diag: diag_coarsest,
             });
             break; 
