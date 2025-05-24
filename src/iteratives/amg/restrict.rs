@@ -1,4 +1,4 @@
-use super::super::*;
+use super::*;
 
 pub(crate) fn build_r<N>(_a: &CsrMatrix<N>, p: &CsrMatrix<N>) -> CsrMatrix<N>
 where N: RealField + Copy

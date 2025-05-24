@@ -1,4 +1,4 @@
-use super::{super::*, graph::strength_graph};
+use super::{*, graph::strength_graph};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mark {

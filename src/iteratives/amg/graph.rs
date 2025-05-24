@@ -1,4 +1,4 @@
-use super::super::*;
+use super::*;
 
 pub(crate) fn strength_graph<T>(a: &CsrMatrix<T>, theta: T) -> Vec<Vec<usize>>
 where

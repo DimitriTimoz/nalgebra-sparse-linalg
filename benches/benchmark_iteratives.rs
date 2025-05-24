@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use nalgebra_sparse::na::DVector;
 use nalgebra_sparse::CsrMatrix;
-use nalgebra_sparse_linalg::iteratives::{amg, biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation, SpMatVecMul};
+use nalgebra_sparse_linalg::iteratives::{biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation, SpMatVecMul};
 use rand::{rng, Rng};
 use rand::seq::SliceRandom;
 use std::env;
@@ -182,6 +182,7 @@ fn bench_methods(c: &mut Criterion) {
             });
         }
         // Only run AMG if BENCH_METHOD is unset or matches
+        #[cfg(feature = "amg")]
         if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("amg")) {
             group.bench_with_input(BenchmarkId::new("AMG", n), &n, |be, &_n| {
                 be.iter_batched(
@@ -200,7 +201,6 @@ fn bench_methods(c: &mut Criterion) {
                 );
             });
         }
-
     }
     group.finish();
 }

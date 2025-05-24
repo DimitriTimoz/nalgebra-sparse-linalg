@@ -3,7 +3,7 @@ use nalgebra_sparse::na::RealField;
 
 use crate::iteratives::amg::restrict::build_r;
 
-use super::{super::*, coarsen::coarsen, graph::strength_graph, interpolate::build_p, rap};
+use super::{*, coarsen::coarsen, graph::strength_graph, interpolate::build_p, rap};
 
 pub struct Level<N> {
     pub a: CsrMatrix<N>,
