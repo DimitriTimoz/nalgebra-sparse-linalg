@@ -86,7 +86,7 @@ fn bench_methods(c: &mut Criterion) {
     group.plot_config(PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic));
     let sizes = [100usize, 1_000, 10_000];//, 10_000, 50_000, 100_000, 200_000];
     for &n in &sizes {
-        let nnz = n.min(50) / 10;
+        let nnz = n.min(40) / 10;
         // Only run Jacobi if BENCH_METHOD is unset or matches
         if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("jacobi")) {
             group.bench_with_input(BenchmarkId::new("Jacobi", n), &n, |be, &_n| {

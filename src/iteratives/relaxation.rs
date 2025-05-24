@@ -17,6 +17,98 @@
 
 use super::*;
 
+/// Struct for the Relaxation method (including SOR), implementing the IterativeSolver trait.
+pub struct Relaxation<T> {
+    pub x: DVector<T>,
+    pub new_x: DVector<T>,
+    pub weight: T,
+    pub tol: T,
+    pub max_iter: usize,
+    pub iter: usize,
+    pub converged: bool,
+}
+
+impl<T> IterativeSolver<CsrMatrix<T>, DVector<T>, T> for Relaxation<T>
+where
+    T: SimdRealField + PartialOrd + Copy,
+{
+    fn init(&mut self, a: &CsrMatrix<T>, _b: &DVector<T>, x0: Option<&DVector<T>>) {
+        let n = a.nrows();
+        self.x = match x0 {
+            Some(x0) => x0.clone(),
+            None => DVector::<T>::zeros(n),
+        };
+        self.new_x = self.x.clone();
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn step(&mut self, a: &CsrMatrix<T>, b: &DVector<T>) -> bool {
+        let n = a.nrows();
+        for row_i in 0..n {
+            if let Some(row) = &a.get_row(row_i) {
+                let mut sigma = b[row_i];
+                let col_indices = row.col_indices();
+                let values = row.values();
+                for (col_i, value) in col_indices.iter().zip(values.iter()) {
+                    if *col_i != row_i {
+                        sigma -= *value * self.new_x[*col_i];
+                    }
+                }
+                let diag = a.get_entry(row_i, row_i);
+                let diag = match diag {
+                    Some(diag) => diag.into_value(),
+                    None => return false,
+                };
+                if diag < self.tol {
+                    return false;
+                }
+                self.new_x[row_i] = (sigma / diag) * self.weight + (T::one() - self.weight) * self.x[row_i];
+            }
+        }
+        let norm = self.x.iter().zip(self.new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
+            m + (*x_i - *new_x_i).simd_norm1()
+        });
+        std::mem::swap(&mut self.x, &mut self.new_x);
+        self.iter += 1;
+        if norm <= self.tol {
+            self.converged = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn reset(&mut self) {
+        self.x.fill(T::zero());
+        self.new_x.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn hard_reset(&mut self) {
+        self.x = DVector::<T>::zeros(0);
+        self.new_x = DVector::<T>::zeros(0);
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn soft_reset(&mut self) {
+        self.x.fill(T::zero());
+        self.new_x.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn solution(&self) -> &DVector<T> {
+        &self.x
+    }
+
+    fn iterations(&self) -> usize {
+        self.iter
+    }
+}
+
 /// Solves the linear system `Ax = b` using the Successive Over-Relaxation (SOR) iterative method.
 ///
 /// This function initializes the solution vector `x` to zeros.
@@ -74,15 +166,25 @@ use super::*;
 /// 
 pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, weight: T, tol: T) -> Option<DVector<T>> 
 where 
-    T: SimdRealField + PartialOrd + Send + Sync 
+    T: SimdRealField + PartialOrd + Copy
 {
-    let mut x = DVector::<T>::zeros(a.nrows());
-    if solve_with_initial_guess(a, b, &mut x,  max_iter, weight, tol) {
-        Some(x)
+    let mut solver = Relaxation {
+        x: DVector::<T>::zeros(a.nrows()),
+        new_x: DVector::<T>::zeros(a.nrows()),
+        weight,
+        tol,
+        max_iter,
+        iter: 0,
+        converged: false,
+    };
+    solver.init(a, b, None);
+    if solver.solve_iterations(a, b, max_iter) {
+        Some(solver.x.clone())
     } else {
         None
     }
 }
+
 /// Solves the linear system `Ax = b` using the Successive Over-Relaxation (SOR) iterative method,
 /// starting with an initial guess for `x`.
 ///
@@ -136,40 +238,19 @@ where
 ///
 pub fn solve_with_initial_guess<T>(a: &CsrMatrix<T>, b: &DVector<T>, x: &mut DVector<T>, max_iter: usize, weight: T, tol: T) -> bool
 where 
-    T: SimdRealField + PartialOrd
+    T: SimdRealField + PartialOrd + Copy
 {
-    let mut new_x = (*x).clone();
-    for _ in 0..max_iter {
-        for row_i in 0..a.nrows() {
-            if let Some(row) = &a.get_row(row_i) {
-                let mut sigma = b[row_i].clone();
-
-                let col_indices = row.col_indices();
-                let values = row.values();
-                for (col_i, value) in col_indices.iter().zip(values.iter()) {
-                    if *col_i != row_i {
-                        sigma -= value.clone() * new_x[*col_i].clone();
-                    }
-                }
-                let diag = a.get_entry(row_i, row_i);
-                let diag = match diag {
-                    Some(diag) => diag.into_value(),
-                    None => return false,
-                };
-                if diag < tol {
-                    return false
-                }
-                new_x[row_i] = (sigma / diag) * weight.clone() + (T::one() - weight.clone()) * x[row_i].clone();
-            }
-        }
-        // Check for convergence
-        let norm = x.iter().zip(new_x.iter()).fold(T::zero(), |m, (x_i, new_x_i)| {
-            m + (x_i.clone() - new_x_i.clone()).simd_norm1()
-        });
-        std::mem::swap(x, &mut new_x);
-        if norm <= tol {
-            return true;
-        }
-    }
-    false
+    let mut solver = Relaxation {
+        x: x.clone(),
+        new_x: DVector::<T>::zeros(a.nrows()),
+        weight,
+        tol,
+        max_iter,
+        iter: 0,
+        converged: false,
+    };
+    solver.init(a, b, Some(x));
+    let converged = solver.solve_iterations(a, b, max_iter);
+    *x = solver.x.clone();
+    converged
 }
