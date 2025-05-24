@@ -3,6 +3,8 @@ pub mod biconjugate_gradient;
 pub mod conjugate_gradient;
 pub mod gauss_seidel;
 pub mod relaxation;
+
+#[cfg(feature = "amg")]
 pub mod amg;
 
 pub use biconjugate_gradient::solve as solve_biconjugate_gradient;

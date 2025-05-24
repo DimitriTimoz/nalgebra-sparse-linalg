@@ -66,7 +66,7 @@ fn generate_spd(size: usize, nnz_per_row: usize) -> CsrMatrix<f64> {
     };
     let at = base.transpose();
     let ata = &at * &base;
-    let alpha: f64 = 4.0;
+    let alpha: f64 = 5.0;
     let identity = CsrMatrix::identity(size) * alpha;
     &ata + &identity
 }
@@ -85,7 +85,7 @@ fn bench_methods(c: &mut Criterion) {
     let mut group = c.benchmark_group("IterativeSolvers");
     let sizes = [100usize, 500, 1_000,2_000, 10_000];//, 10_000, 50_000, 100_000, 200_000];
     for &n in &sizes {
-        let nnz = n.min(50) / 5;
+        let nnz = n.min(100) / 5;
         // Only run Jacobi if BENCH_METHOD is unset or matches
         if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("jacobi")) {
             group.bench_with_input(BenchmarkId::new("Jacobi", n), &n, |be, &_n| {

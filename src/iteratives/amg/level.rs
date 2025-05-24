@@ -135,6 +135,8 @@ impl<N: RealField + Copy> Hierarchy<N> {
 
         // 5. Post-smooth: x_l gets updated by nu_post smoothing steps
         gauss_seidel::solve_with_initial_guess(&lev.a, b, x, nu_post, tol);
+        *residual_buffer = &lev.a * &*x - b;
+        println!("Level {} residual norm: {}", l, residual_buffer.norm());
     }
 }
 

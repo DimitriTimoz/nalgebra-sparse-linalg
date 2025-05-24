@@ -1,7 +1,6 @@
 //! Tests for all iterative solvers in nalgebra-sparse-linalg
 
 use nalgebra_sparse::{na::DVector, CsrMatrix};
-use nalgebra_sparse_linalg::iteratives::amg::solve_with_initial_guess;
 use nalgebra_sparse_linalg::iteratives::{
     biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation
 };
@@ -259,14 +258,20 @@ fn test_conjugate_gradient_sdp() {
     assert!((result.unwrap() - x_true).amax() < 1e-6);
 }
 
-#[test]
-fn test_amg() {
-    let (a_orig, b, x_true) = get_very_large_sparse_matrix();
-    let n = a_orig.nrows();
-    let mut x = DVector::zeros(n);
-    let tol = 1e-8;
-
-    solve_with_initial_guess(a_orig, &b, &mut x,10000,  tol, 0.8);
+#[cfg(feature = "amg")]
+mod amg {
+    use nalgebra_sparse_linalg::iteratives::amg::solve_with_initial_guess;
+    use super::*;
     
-    assert!((x - &x_true).amax() < tol);
+    #[test]
+    fn test_amg() {
+        let (a_orig, b, x_true) = get_very_large_sparse_matrix();
+        let n = a_orig.nrows();
+        let mut x = DVector::zeros(n);
+        let tol = 1e-8;
+
+        solve_with_initial_guess(a_orig, &b, &mut x,10000,  tol, 0.8);
+        
+        assert!((x - &x_true).amax() < tol);
+    }
 }
