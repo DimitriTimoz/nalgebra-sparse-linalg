@@ -36,7 +36,3 @@ impl<T: SimdRealField + Copy> SpMatVecMul<T> for CscMatrix<T> {
     }
 }
 
-pub struct Converged;
-pub struct NotConverged;
-
-type ConvergedResult = Result<Converged, NotConverged>;

@@ -9,39 +9,23 @@ pub enum LinAlgError {
     Internal(String),
 }
 
-pub trait Preconditioner<Mat, Vec> {
-    type Info: Default;
-
-    fn build(matrix: &Mat) -> LinAlgResult<Self>
+pub trait Preconditioner<M, V> {
+    fn build(a: &M) -> Result<Self, &'static str>
     where
         Self: Sized;
 
-    /// Apply \(M^{-1} v\) (right preconditioning).
-    fn apply(&self, rhs: &mut Vec);
-
-    /// Apply \(v M^{-1}\) (left preconditioning).
-    fn apply_left(&self, _rhs: &mut Vec) -> LinAlgResult<()>
-    where
-        Self: Sized,
-    {
-        Err(LinAlgError::Internal(
-            "apply_left not implemented for this preconditioner".to_string(),
-        ))
-    }
+    fn apply_left(&self, v: &mut V);     // Approx. solves M⁻¹ * v
+    fn apply_right(&self, v: &mut V);    // Approx. solves M⁻¹ applied on the right (optional)
 }
 
-pub struct IdentityPreconditioner<Mat, Vec> {
-    _marker: std::marker::PhantomData<(Mat, Vec)>,
-}
 
-impl<Mat, Vec> Preconditioner<Mat, Vec> for IdentityPreconditioner<Mat, Vec> {
-    type Info = ();
+pub struct IdentityPreconditioner;
 
-    fn build(_: &Mat) -> LinAlgResult<Self> {
-        Ok(Self {
-            _marker: std::marker::PhantomData,
-        })
+impl<M, V> Preconditioner<M, V> for IdentityPreconditioner {
+    fn build(_a: &M) -> Result<Self, &'static str> {
+        Ok(IdentityPreconditioner)
     }
 
-    fn apply(&self, _rhs: &mut Vec) {}
+    fn apply_left(&self, _v: &mut V) {}
+    fn apply_right(&self, _v: &mut V) {}
 }
