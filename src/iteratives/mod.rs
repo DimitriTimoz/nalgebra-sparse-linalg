@@ -36,3 +36,29 @@ impl<T: SimdRealField + Copy> SpMatVecMul<T> for CscMatrix<T> {
     }
 }
 
+pub trait IterativeSolver<M, V, T> {
+    /// Initializes the solver's internal state with the system and vector b.
+    fn init(&mut self, a: &M, b: &V, x0: Option<&V>);
+    /// Performs one iteration of the solver. Returns true if converged.
+    fn step(&mut self, a: &M, b: &V) -> bool;
+    /// Resets the internal state (soft reset, preserves allocated memory).
+    fn reset(&mut self);
+    /// Completely resets the internal state (hard reset, frees memory if needed).
+    fn hard_reset(&mut self);
+    /// Partially resets the state (e.g., to restart with a new b but same matrix).
+    fn soft_reset(&mut self);
+    /// Gets the current solution.
+    fn solution(&self) -> &V;
+    /// Gets the number of iterations performed.
+    fn iterations(&self) -> usize;
+
+    /// Runs the iterative solver loop. Returns true if converged, false otherwise.
+    fn solve_iterations(&mut self, a: &M, b: &V, max_iter: usize) -> bool {
+        for _ in 0..max_iter {
+            if self.step(a, b) {
+                return true;
+            }
+        }
+        self.step(a, b)
+    }
+}

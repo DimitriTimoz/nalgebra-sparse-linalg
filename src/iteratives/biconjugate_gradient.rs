@@ -18,33 +18,30 @@
 //! assert!(result.is_some());
 //! ```
 
-use nalgebra_sparse::na::{Const, Dyn, Matrix, VecStorage};
-
 use super::*;
 
 /// Solves the general linear system Ax = b using the BiConjugate Gradient (BiCG) method.
 ///
-/// This function initializes the solution vector `x` to zeros.
-/// It is generic over any matrix type `M` that implements the `SpMatVecMul<T>` trait.
-///
-/// # Arguments
-/// * `a` - A reference to the sparse matrix `A`.
-/// * `b` - A reference to the right-hand side vector `b`.
-/// * `max_iter` - The maximum number of iterations to perform.
-/// * `tol` - The tolerance for convergence. The iteration stops if the norm of the residual
-///   is less than or equal to `tol`.
-///
-/// # Returns
-/// * `Some(DVector<T>)` - The solution vector `x` if convergence is achieved within `max_iter`.
-/// * `None` - If the method does not converge within `max_iter` iterations or encounters a breakdown.
+/// This function initializes the solution vector `x` to zeros and uses the BiConjugateGradient struct.
 pub fn solve<M, T>(a: &M, b: &DVector<T>, max_iter: usize, tol: T) -> Option<DVector<T>> 
 where 
     M: SpMatVecMul<T>,
     T: SimdRealField + PartialOrd + Copy
 {
-    let mut x = DVector::<T>::zeros(a.nrows());
-    if solve_with_initial_guess::<M, T, IdentityPreconditioner>(a, b, &mut x, max_iter, tol) {
-        Some(x)
+    let mut solver = BiConjugateGradient {
+        x: DVector::<T>::zeros(a.nrows()),
+        r: DVector::<T>::zeros(a.nrows()),
+        r_hat: DVector::<T>::zeros(a.nrows()),
+        p: DVector::<T>::zeros(a.nrows()),
+        v: DVector::<T>::zeros(a.nrows()),
+        iter: 0,
+        tol,
+        max_iter,
+        converged: false,
+    };
+    solver.init(a, b, None);
+    if solver.solve_iterations(a, b, max_iter) {
+        Some(solver.x.clone())
     } else {
         None
     }
@@ -53,66 +50,135 @@ where
 /// Solves the general linear system Ax = b using the BiConjugate Gradient (BiCG) method,
 /// starting with an initial guess for `x`.
 ///
-/// This function modifies `x` in place. It is generic over any matrix type `M` that
-/// implements the `SpMatVecMul<T>` trait.
-///
-/// # Arguments
-/// * `a` - A reference to the sparse matrix `A`.
-/// * `b` - A reference to the right-hand side vector `b`.
-/// * `x` - A mutable reference to the initial guess for the solution vector. This vector
-///   will be updated in place with the refined solution.
-/// * `max_iter` - The maximum number of iterations to perform.
-/// * `tol` - The tolerance for convergence. The iteration stops if the norm of the residual
-///   is less than or equal to `tol`.
-///
-/// # Returns
-/// * `true` - If the method converges to a solution within `max_iter` iterations.
-/// * `false` - If the method does not converge within `max_iter` iterations or encounters a breakdown.
-pub fn solve_with_initial_guess<M, T, P>(a: &M, b: &DVector<T>,  x: &mut DVector<T>, max_iter: usize, tol: T) -> bool
+/// This function modifies `x` in place and uses the BiConjugateGradient struct.
+pub fn solve_with_initial_guess<M, T>(a: &M, b: &DVector<T>, x: &mut DVector<T>, max_iter: usize, tol: T) -> bool
 where 
     M: SpMatVecMul<T>,
-    T: SimdRealField + PartialOrd + Copy,
-    P: Preconditioner<M, DVector<T>>
+    T: SimdRealField + PartialOrd + Copy
 {
-    // Initial residual: r0 = b - A * x0, but x0 = 0 => r0 = b
-    let mut residual = b.clone();
-    let residual_hat_0 = residual.clone(); // Should be a random or fixed vector for BiCG
+    let mut solver = BiConjugateGradient {
+        x: x.clone(),
+        r: DVector::<T>::zeros(a.nrows()),
+        r_hat: DVector::<T>::zeros(a.nrows()),
+        p: DVector::<T>::zeros(a.nrows()),
+        v: DVector::<T>::zeros(a.nrows()),
+        iter: 0,
+        tol,
+        max_iter,
+        converged: false,
+    };
+    solver.init(a, b, Some(x));
+    let converged = solver.solve_iterations(a, b, max_iter);
+    *x = solver.x.clone();
+    converged
+}
 
-    let mut residual_dot = residual.dot(&residual_hat_0);
-    if residual.clone().magnitude() <= tol {
-        return true;
+/// BiConjugate Gradient iterative solver structure
+pub struct BiConjugateGradient<T> {
+    pub x: DVector<T>,
+    pub r: DVector<T>,
+    pub r_hat: DVector<T>,
+    pub p: DVector<T>,
+    pub v: DVector<T>,
+    pub iter: usize,
+    pub tol: T,
+    pub max_iter: usize,
+    pub converged: bool,
+}
+
+impl<M, T> IterativeSolver<M, DVector<T>, T> for BiConjugateGradient<T>
+where
+    M: SpMatVecMul<T>,
+    T: SimdRealField + PartialOrd + Copy,
+{
+    /// Initialize the solver state with the system and right-hand side vector.
+    fn init(&mut self, a: &M, b: &DVector<T>, x0: Option<&DVector<T>>) {
+        let n = a.nrows();
+        self.x = match x0 {
+            Some(x0) => x0.clone(),
+            None => DVector::<T>::zeros(n),
+        };
+        self.r = b - &a.mul_vec(&self.x);
+        self.r_hat = self.r.clone(); // In practice, r_hat should be a fixed or random vector
+        self.p = self.r.clone();
+        self.v = DVector::<T>::zeros(n);
+        self.iter = 0;
+        self.converged = false;
     }
 
-    let mut p = residual.clone();
-    let mut s = DVector::<T>::zeros(a.nrows());
-    for _ in 0..max_iter {
-        let mut v =  a.mul_vec(&p);
-        let alpha = residual_dot / residual_hat_0.dot(&v);
-        x.axpy(alpha, &p, T::one());
-        s.copy_from(&residual); 
-        s.axpy(-alpha, &v, T::one());
-
-        // Check for convergence
-        if s.magnitude() <= tol {
+    /// Perform one iteration of the solver. Returns true if converged.
+    fn step(&mut self, a: &M, _b: &DVector<T>) -> bool {
+        if self.converged { return true; }
+        let r_dot = self.r.dot(&self.r_hat);
+        if self.r.magnitude() <= self.tol {
+            self.converged = true;
             return true;
         }
-        
+        self.v = a.mul_vec(&self.p);
+        let alpha = r_dot / self.r_hat.dot(&self.v);
+        self.x.axpy(alpha, &self.p, T::one());
+        let s = &self.r - &self.v * alpha;
+        if s.magnitude() <= self.tol {
+            self.r = s;
+            self.converged = true;
+            return true;
+        }
         let t = a.mul_vec(&s);
-        let omega = t.dot(&s)/t.dot(&t);
-        x.axpy(omega, &s, T::one());
-        let new_residual = &s - &t * omega;
-        // Check for convergence
-        if new_residual.magnitude() <= tol {
+        let omega = t.dot(&s) / t.dot(&t);
+        self.x.axpy(omega, &s, T::one());
+        let new_r = &s - &t * omega;
+        if new_r.magnitude() <= self.tol {
+            self.r = new_r;
+            self.converged = true;
             return true;
         }
-        let new_residual_dot = residual_hat_0.dot(&new_residual);
-        let beta = (new_residual_dot/residual_dot)*(alpha/omega);
-        v.scale_mut(omega);
-        p -= &v;
-        p.scale_mut(beta);
-        p += &new_residual;
-        residual_dot = new_residual_dot;
-        residual = new_residual;
+        let new_r_dot = self.r_hat.dot(&new_r);
+        let beta = (new_r_dot / r_dot) * (alpha / omega);
+        self.p = &new_r + (&self.p - &self.v * omega) * beta;
+        self.r = new_r;
+        self.iter += 1;
+        false
     }
-    false
+
+    /// Reset the internal state (soft reset, keeps allocated memory).
+    fn reset(&mut self) {
+        self.x.fill(T::zero());
+        self.r.fill(T::zero());
+        self.r_hat.fill(T::zero());
+        self.p.fill(T::zero());
+        self.v.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    /// Completely reset the internal state (hard reset, releases memory if needed).
+    fn hard_reset(&mut self) {
+        self.x = DVector::<T>::zeros(0);
+        self.r = DVector::<T>::zeros(0);
+        self.r_hat = DVector::<T>::zeros(0);
+        self.p = DVector::<T>::zeros(0);
+        self.v = DVector::<T>::zeros(0);
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    /// Partial reset (e.g. to restart with a new b but same matrix).
+    fn soft_reset(&mut self) {
+        self.r.fill(T::zero());
+        self.r_hat.fill(T::zero());
+        self.p.fill(T::zero());
+        self.v.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    /// Get the current solution vector.
+    fn solution(&self) -> &DVector<T> {
+        &self.x
+    }
+
+    /// Get the number of performed iterations.
+    fn iterations(&self) -> usize {
+        self.iter
+    }
 }
