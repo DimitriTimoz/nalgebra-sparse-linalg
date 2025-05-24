@@ -9,6 +9,144 @@
 
 use super::*;
 
+/// Jacobi iterative solver structure
+pub struct Jacobi<T> {
+    pub x: DVector<T>,
+    pub new_x: DVector<T>,
+    pub inv_diag: Vec<T>,
+    pub tol: T,
+    pub max_iter: usize,
+    pub iter: usize,
+    pub converged: bool,
+}
+
+impl<T> Jacobi<T>
+where
+    T: SimdRealField + PartialOrd + Send + Sync + Copy,
+{
+    fn use_parallel(a: &CsrMatrix<T>) -> bool {
+        a.nnz() >= 50_000
+    }
+}
+
+impl<T> IterativeSolver<CsrMatrix<T>, DVector<T>, T> for Jacobi<T>
+where
+    T: SimdRealField + PartialOrd + Send + Sync + Copy,
+{
+    fn init(&mut self, a: &CsrMatrix<T>, _b: &DVector<T>, x0: Option<&DVector<T>>) {
+        let n = a.nrows();
+        self.x = match x0 {
+            Some(x0) => x0.clone(),
+            None => DVector::<T>::zeros(n),
+        };
+        self.new_x = self.x.clone();
+        self.inv_diag = a.diagonal_as_csr().triplet_iter_mut()
+            .map(|(_, _, v)| {
+                if *v < self.tol {
+                    T::zero()
+                } else {
+                    T::one() / *v
+                }
+            }).collect();
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn step(&mut self, a: &CsrMatrix<T>, b: &DVector<T>) -> bool {
+        let n = a.nrows();
+        let use_parallel = Self::use_parallel(a);
+        if use_parallel {
+            self.new_x.as_mut_slice()
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(row_i, new_x_i)| {
+                    if let Some(row) = a.get_row(row_i) {
+                        let mut sigma = b[row_i];
+                        let col_indices = row.col_indices();
+                        let values = row.values();
+                        for (col_i, value) in col_indices.iter().zip(values.iter()) {
+                            if *col_i != row_i {
+                                sigma -= *value * self.x[*col_i];
+                            }
+                        }
+                        if let Some(diag) = self.inv_diag.get(row_i) {
+                            if diag < &self.tol {
+                                *new_x_i = T::zero();
+                            } else {
+                                *new_x_i = sigma * *diag;
+                            }
+                        } else {
+                            *new_x_i = T::zero();
+                        }
+                    }
+                });
+        } else {
+            for row_i in 0..n {
+                if let Some(row) = &a.get_row(row_i) {
+                    let mut sigma = b[row_i];
+                    let col_indices = row.col_indices();
+                    let values = row.values();
+                    for (col_i, value) in col_indices.iter().zip(values.iter()) {
+                        if *col_i != row_i {
+                            sigma -= *value * self.x[*col_i];
+                        }
+                    }
+                    let diag = self.inv_diag.get(row_i);
+                    let diag = match diag {
+                        Some(diag) => diag,
+                        None => return false,
+                    };
+                    if diag < &self.tol {
+                        return false;
+                    }
+                    self.new_x[row_i] = sigma * *diag;
+                }
+            }
+        }
+        let norm_inf = (0..n)
+            .map(|i| (self.x[i] - self.new_x[i]).simd_abs())
+            .reduce(|a, b| if a > b { a } else { b }).unwrap_or(T::zero());
+        std::mem::swap(&mut self.x, &mut self.new_x);
+        self.iter += 1;
+        if norm_inf <= self.tol {
+            self.converged = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn reset(&mut self) {
+        self.x.fill(T::zero());
+        self.new_x.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn hard_reset(&mut self) {
+        self.x = DVector::<T>::zeros(0);
+        self.new_x = DVector::<T>::zeros(0);
+        self.inv_diag.clear();
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn soft_reset(&mut self) {
+        self.x.fill(T::zero());
+        self.new_x.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+    }
+
+    fn solution(&self) -> &DVector<T> {
+        &self.x
+    }
+
+    fn iterations(&self) -> usize {
+        self.iter
+    }
+}
+
 /// Solves the linear system `Ax = b` using the Jacobi iterative method.
 ///
 /// This function initializes the solution vector `x` to zeros.
@@ -64,13 +202,23 @@ pub fn solve<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T) -> Op
 where 
     T: SimdRealField + PartialOrd + Send + Sync + Copy
 {
-    let mut x = DVector::<T>::zeros(a.nrows());
-    if solve_with_initial_guess(a, b, &mut x, max_iter, tol) {
-        Some(x)
+    let mut solver = Jacobi {
+        x: DVector::<T>::zeros(a.nrows()),
+        new_x: DVector::<T>::zeros(a.nrows()),
+        inv_diag: Vec::new(),
+        tol,
+        max_iter,
+        iter: 0,
+        converged: false,
+    };
+    solver.init(a, b, None);
+    if solver.solve_iterations(a, b, max_iter) {
+        Some(solver.x.clone())
     } else {
         None
     }
 }
+
 /// Solves the linear system `Ax = b` using the Jacobi iterative method,
 /// starting with an initial guess for `x`.
 ///
@@ -132,76 +280,17 @@ pub fn solve_with_initial_guess<T>(a: &CsrMatrix<T>, b: &DVector<T>, x: &mut DVe
 where 
     T: SimdRealField + PartialOrd + Send + Sync + Copy
 {
-    let mut new_x = x.clone();
-    let n = a.nrows();
-    let use_parallel = a.nnz() >= 50_000;
-    let inv_diag = a.diagonal_as_csr().triplet_iter_mut()
-        .map(|(_, _, v)| {
-            if *v < tol {
-                T::zero()
-            } else {
-                T::one() / *v
-            }
-        }).collect::<Vec<_>>();
-        
-    for _ in 0..max_iter {
-        if use_parallel {
-            new_x.as_mut_slice()
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(row_i, new_x_i)| {
-                    if let Some(row) = a.get_row(row_i) {
-                        let mut sigma = b[row_i];
-                        let col_indices = row.col_indices();
-                        let values = row.values();
-                        for (col_i, value) in col_indices.iter().zip(values.iter()) {
-                            if *col_i != row_i {
-                                sigma -= *value * x[*col_i];
-                            }
-                        }
-                        if let Some(diag) = inv_diag.get(row_i) {
-                            if diag < &tol {
-                                *new_x_i = T::zero();
-                            } else {
-                                *new_x_i = sigma * *diag;
-                            }
-                        } else {
-                            *new_x_i = T::zero();
-                        }
-                    }
-                });
-        } else {
-            for row_i in 0..a.nrows() {
-                if let Some(row) = &a.get_row(row_i) {
-                    let mut sigma = b[row_i];
-                    let col_indices = row.col_indices();
-                    let values = row.values();
-                    for (col_i, value) in col_indices.iter().zip(values.iter()) {
-                        if *col_i != row_i {
-                            sigma -= *value * x[*col_i];
-                        }
-                    }
-                    let diag = inv_diag.get(row_i);
-                    let diag = match diag {
-                        Some(diag) => diag,
-                        None => return false,
-                    };
-                    if diag < &tol {
-                        return false;
-                    }
-                    new_x[row_i] = sigma * *diag;
-                }
-            }
-        }
-        let norm_inf = (0..n)
-            .map(|i| (x[i] - new_x[i]).simd_abs())
-            .reduce( |a, b| if a > b { a } else { b }).unwrap_or(T::zero());
-
-
-        std::mem::swap(x, &mut new_x);
-        if norm_inf <= tol {
-            return true;
-        }
-    }
-    false
+    let mut solver = Jacobi {
+        x: x.clone(),
+        new_x: DVector::<T>::zeros(a.nrows()),
+        inv_diag: Vec::new(),
+        tol,
+        max_iter,
+        iter: 0,
+        converged: false,
+    };
+    solver.init(a, b, Some(x));
+    let converged = solver.solve_iterations(a, b, max_iter);
+    *x = solver.x.clone();
+    converged
 }
