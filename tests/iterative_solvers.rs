@@ -2,8 +2,9 @@
 
 use nalgebra_sparse::{na::DVector, CsrMatrix};
 use nalgebra_sparse_linalg::iteratives::{
-    jacobi, gauss_seidel, relaxation, conjugate_gradient, biconjugate_gradient
+    biconjugate_gradient, conjugate_gradient, gauss_seidel, jacobi, relaxation
 };
+use rand::{rng, Rng};
 
 fn get_identity_and_rhs(n: usize, rhs_val: f64) -> (CsrMatrix<f64>, DVector<f64>) {
     (CsrMatrix::identity(n), DVector::from_vec(vec![rhs_val; n]))
@@ -51,9 +52,48 @@ fn get_sdp_matrix() -> (CsrMatrix<f64>, DVector<f64>, DVector<f64>) {
     let rows = vec![0, 3, 6, 9];
     let cols = vec![0, 1, 2, 0, 1, 2, 0, 1, 2];
     let vals = vec![6.0, 2.0, 1.0, 2.0, 5.0, 2.0, 1.0, 2.0, 4.0];
+    
     let a = CsrMatrix::try_from_csr_data(n, n, rows, cols, vals).unwrap();
     let x_true = DVector::from_vec(vec![1.0, 2.0, 3.0]);
     let b = &a * &x_true;
+    (a, b, x_true)
+}
+
+fn get_very_large_sparse_matrix() -> (CsrMatrix<f64>, DVector<f64>, DVector<f64>) {
+    let n = 1000; // Size of the matrix
+    let mut row_offsets = Vec::with_capacity(n + 1);
+    let mut col_indices = Vec::new();
+    let mut values = Vec::new();
+
+    row_offsets.push(0);
+    let mut nnz = 0;
+
+    for i in 0..n {
+        // Add elements for row i
+        if i > 0 {
+            // Element (i, i-1)
+            col_indices.push(i - 1);
+            values.push(-1.0);
+            nnz += 1;
+        }
+
+        // Element (i, i) - Diagonal
+        col_indices.push(i);
+        values.push(3.0); // Ensure diagonal dominance for stability
+        nnz += 1;
+
+        if i < n - 1 {
+            // Element (i, i+1)
+            col_indices.push(i + 1);
+            values.push(-1.0);
+            nnz += 1;
+        }
+        row_offsets.push(nnz);
+    }
+    let mut rng = rng();
+    let a = CsrMatrix::try_from_csr_data(n, n, row_offsets, col_indices, values).unwrap();
+    let x_true = DVector::<f64>::from_fn(n, |_, _| rng.random_range(-1.0..1.0));
+    let b = &a * &x_true; // Calculate RHS vector b = A * x_true
     (a, b, x_true)
 }
 
@@ -216,4 +256,22 @@ fn test_conjugate_gradient_sdp() {
     let result = conjugate_gradient::solve(&a, &b, 1000, 1e-8);
     assert!(result.is_some());
     assert!((result.unwrap() - x_true).amax() < 1e-6);
+}
+
+#[cfg(feature = "amg")]
+mod amg {
+    use nalgebra_sparse_linalg::iteratives::amg::solve_with_initial_guess;
+    use super::*;
+    
+    #[test]
+    fn test_amg() {
+        let (a_orig, b, x_true) = get_very_large_sparse_matrix();
+        let n = a_orig.nrows();
+        let mut x = DVector::zeros(n);
+        let tol = 1e-8;
+
+        solve_with_initial_guess(a_orig, &b, &mut x,10000,  tol, 0.8);
+        
+        assert!((x - &x_true).amax() < tol);
+    }
 }

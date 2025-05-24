@@ -3,8 +3,11 @@ name = "nalgebra-sparse-linalg"
 description = "Sparse linear algebra library for Rust using nalgebra"
 authors = ["Dimitri Timoz <dimitri.timoz@protonmail.com>"]
 license = "MIT"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
+
+[features]
+amg = []
 
 [lib]
 
@@ -15,7 +18,8 @@ rayon = "1.10"
 rand = { version = "0.9" }
 
 [dev-dependencies]
-criterion = { version = "0.5" }
+criterion = { version = "0.6" }
+approx = "0.5"
 
 [[bench]]
 name = "benchmark_iteratives"

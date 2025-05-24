@@ -4,10 +4,13 @@ pub mod conjugate_gradient;
 pub mod gauss_seidel;
 pub mod relaxation;
 
+#[cfg(feature = "amg")]
+pub mod amg;
+
 pub use biconjugate_gradient::solve as solve_biconjugate_gradient;
 
 pub use nalgebra_sparse::{CscMatrix, CsrMatrix};
-pub(crate) use nalgebra_sparse::{na::{DVector, SimdRealField}};
+pub(crate) use nalgebra_sparse::na::{DVector, SimdRealField};
 pub(crate) use rayon::prelude::*;
 
 pub trait SpMatVecMul<T: SimdRealField + Copy> {
