@@ -79,13 +79,15 @@ where
     if residual.clone().magnitude() <= tol {
         return true;
     }
-    let mut p = residual.clone();
 
+    let mut p = residual.clone();
+    let mut s = DVector::<T>::zeros(a.nrows());
     for _ in 0..max_iter {
         let mut v = a.mul_vec(&p);
         let alpha = residual_dot / residual_hat_0.dot(&v);
         x.axpy(alpha, &p, T::one());
-        let s = &residual - &v * alpha;
+        s.copy_from(&residual); 
+        s.axpy(-alpha, &v, T::one());
 
         // Check for convergence
         if s.magnitude() <= tol {
