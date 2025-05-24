@@ -31,7 +31,7 @@ where
     use level::*;
     
     // Pre-compute initial residual
-    let mut residual_buffer = DVector::from(&a * &*x - b);
+    let residual_buffer = DVector::from(&a * &*x - b);
     let hierarchy = setup(a, theta, 100);
     
     // Check if we're already converged
@@ -44,11 +44,15 @@ where
     let adaptive_tol = tol.max(initial_residual_norm * T::from_f64(1e-3).unwrap());
     
     for i in 0..max_iter {
+        let mut residual_buffer = DVector::zeros(b.len());
         hierarchy.vcycle(0, b, x, &mut residual_buffer, adaptive_tol, 1, 1);
+        
+        // Use the residual buffer that was updated by vcycle
+        let current_residual = residual_buffer;
         
         // Check convergence every few iterations to reduce overhead
         if i % 5 == 4 || i == max_iter - 1 {
-            let residual_norm = residual_buffer.amax();
+            let residual_norm = current_residual.amax();
             if residual_norm <= tol {
                 return true;
             }

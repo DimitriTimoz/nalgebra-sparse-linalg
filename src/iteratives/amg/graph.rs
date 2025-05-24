@@ -15,15 +15,11 @@ where
                 let values = row.values();
                 
                 // Find the maximum absolute off-diagonal value in the current row i
-                let mut max_abs_off_diag_val = T::zero();
-                for (col_idx, val) in col_indices.iter().zip(values.iter()) {
-                    if *col_idx != i { // Exclude diagonal
-                        let abs_val = val.abs();
-                        if abs_val > max_abs_off_diag_val {
-                            max_abs_off_diag_val = abs_val;
-                        }
-                    }
-                }
+                let max_abs_off_diag_val = col_indices.iter()
+                    .zip(values.iter())
+                    .filter(|(col_idx, _)| **col_idx != i)
+                    .map(|(_, val)| val.abs())
+                    .fold(T::zero(), |acc, val| if val > acc { val } else { acc });
 
                 // If there are no off-diagonal elements, no strong connections can be formed.
                 if max_abs_off_diag_val == T::zero() {
@@ -33,17 +29,13 @@ where
 
                 let threshold_val = max_abs_off_diag_val * theta;
 
-                // Pre-allocate vector for strong neighbors (estimate based on typical sparsity)
-                let mut strong_neighbors = Vec::with_capacity(col_indices.len().min(10));
-                
-                // Filter connections based on the threshold
-                for (j_idx, val) in col_indices.iter().zip(values.iter()) {
-                    // Point j is a strong neighbor of i if |a_ij| >= threshold_val
-                    // And j must not be i itself.
-                    if *j_idx != i && val.abs() >= threshold_val {
-                        strong_neighbors.push(*j_idx);
-                    }
-                }
+                // Collect strong neighbors directly using iterator chains
+                let strong_neighbors: Vec<usize> = col_indices.iter()
+                    .zip(values.iter())
+                    .filter_map(|(j_idx, val)| {
+                        (*j_idx != i && val.abs() >= threshold_val).then_some(*j_idx)
+                    })
+                    .collect();
                 
                 result.push(strong_neighbors);
             },

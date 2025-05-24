@@ -13,59 +13,73 @@ where
     let n = a.nrows();
     let n_coarse = coarse_of.iter().filter(|&&c| c != usize::MAX).count();
 
+    // Better capacity estimation based on connectivity
+    let f_points = marks.iter().filter(|&&m| matches!(m, Mark::F)).count();
+    let estimated_nnz = n_coarse + f_points * 4; // More accurate estimate
+    
     let mut trip = CooMatrix::new(n, n_coarse);
-    // Pre-estimate capacity to reduce reallocations
-    let estimated_nnz = n + (n - n_coarse) * 3; // Rough estimate
     trip.reserve(estimated_nnz);
+
+    // Pre-allocate reusable vectors
+    let mut c_neighbors = Vec::with_capacity(8);
+    let mut weights = Vec::with_capacity(8);
 
     for i in 0..n {
         match marks[i] {
             Mark::C => {
-                let j = coarse_of[i];
-                trip.push(i, j, N::one());
+                trip.push(i, coarse_of[i], N::one());
             }
             Mark::F => {
-                // Find C-point neighbors in the strength graph
-                let c_neighbors: Vec<usize> = s[i]
-                    .iter()
-                    .copied()
-                    .filter(|&nbr| matches!(marks[nbr], Mark::C))
-                    .collect();
+                c_neighbors.clear();
+                // Collect coarse neighbors
+                for &nbr in &s[i] {
+                    if matches!(marks[nbr], Mark::C) {
+                        c_neighbors.push(nbr);
+                    }
+                }
 
+                // If no coarse neighbors, add a zero entry
                 if c_neighbors.is_empty() {
-                    // Fallback: connect to first coarse point if available
                     if n_coarse > 0 {
                         trip.push(i, 0, N::one());
                     }
                     continue;
                 }
 
-                // Compute interpolation weights
-                if let Some(diag_entry) = a.get_entry(i, i) {
-                    let diag = diag_entry.into_value();
-                    let mut weight_sum = N::zero();
-                    
-                    // First pass: compute weights
-                    let mut weights = Vec::with_capacity(c_neighbors.len());
+                // Early exit if no diagonal entry
+                let Some(diag_entry) = a.get_entry(i, i) else {
+                    let equal_weight = N::one() / N::from_usize(c_neighbors.len()).unwrap();
                     for &nbr in &c_neighbors {
-                        if let Some(a_ij) = a.get_entry(i, nbr) {
-                            let w = -a_ij.into_value() / diag;
-                            weights.push((coarse_of[nbr], w));
-                            weight_sum += w;
-                        }
+                        trip.push(i, coarse_of[nbr], equal_weight);
                     }
-                    
-                    // Normalize weights to sum to 1 for better stability
-                    if weight_sum != N::zero() {
-                        for (col, w) in weights {
-                            trip.push(i, col, w / weight_sum);
-                        }
-                    } else {
-                        // Fallback: equal weights
-                        let equal_weight = N::one() / N::from_usize(c_neighbors.len()).unwrap();
-                        for &nbr in &c_neighbors {
-                            trip.push(i, coarse_of[nbr], equal_weight);
-                        }
+                    continue;
+                };
+
+                let diag = diag_entry.into_value();
+                let mut weight_sum = N::zero();
+                
+                weights.clear();
+                weights.reserve(c_neighbors.len());
+                
+                // Compute weights in single pass
+                for &nbr in &c_neighbors {
+                    if let Some(a_ij) = a.get_entry(i, nbr) {
+                        let w = -a_ij.into_value() / diag;
+                        weights.push((coarse_of[nbr], w));
+                        weight_sum += w;
+                    }
+                }
+                
+                // Add entries with normalized weights
+                if weight_sum != N::zero() {
+                    let inv_sum = N::one() / weight_sum;
+                    for (col, w) in weights.drain(..) {
+                        trip.push(i, col, w * inv_sum);
+                    }
+                } else {
+                    let equal_weight = N::one() / N::from_usize(c_neighbors.len()).unwrap();
+                    for &nbr in &c_neighbors {
+                        trip.push(i, coarse_of[nbr], equal_weight);
                     }
                 }
             }

@@ -185,6 +185,7 @@ fn bench_methods(c: &mut Criterion) {
         // Only run AMG if BENCH_METHOD is unset or matches
         #[cfg(feature = "amg")]
         if bench_method.as_deref().is_none_or(|m| m.eq_ignore_ascii_case("amg")) {
+            use nalgebra_sparse_linalg::iteratives::amg;
             group.bench_with_input(BenchmarkId::new("AMG", n), &n, |be, &_n| {
                 be.iter_batched(
                     || {
