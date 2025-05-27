@@ -111,6 +111,59 @@ where
         self.nu_pre = nu_pre;
         self.nu_post = nu_post;
     }
+
+    /// Gets the current tolerance
+    pub fn tolerance(&self) -> T {
+        self.tol
+    }
+
+    /// Sets a new tolerance
+    pub fn set_tolerance(&mut self, tol: T) {
+        self.tol = tol;
+    }
+
+    /// Gets the theta parameter for strength-of-connection
+    pub fn theta(&self) -> T {
+        self.theta
+    }
+
+    /// Sets a new theta parameter (requires rebuilding hierarchy)
+    pub fn set_theta(&mut self, theta: T) {
+        self.theta = theta;
+        // Clear hierarchy to force rebuild with new theta
+        self.hierarchy = None;
+    }
+
+    /// Gets the minimum coarse level size
+    pub fn coarse_size(&self) -> usize {
+        self.n_min
+    }
+
+    /// Gets the pre-smoothing iterations
+    pub fn pre_smoothing(&self) -> usize {
+        self.nu_pre
+    }
+
+    /// Gets the post-smoothing iterations  
+    pub fn post_smoothing(&self) -> usize {
+        self.nu_post
+    }
+
+    /// Checks if the solver has converged
+    pub fn has_converged(&self) -> bool {
+        self.converged
+    }
+
+    /// Gets the number of levels in the AMG hierarchy
+    pub fn num_levels(&self) -> usize {
+        self.hierarchy.as_ref().map_or(0, |h| h.levels.len())
+    }
+
+    /// Get residual norm (absolute maximum)
+    pub fn residual_norm(&self, a: &CsrMatrix<T>, b: &DVector<T>) -> T {
+        let residual = a * &self.x - b;
+        residual.amax()
+    }
 }
 
 impl<T> IterativeSolver<CsrMatrix<T>, DVector<T>, T> for Amg<T>
@@ -161,7 +214,7 @@ where
             // Check convergence after the V-cycle
             let new_residual = a * &self.x - b;
             let new_residual_norm = new_residual.amax();
-            
+            println!("Iteration {}: Residual norm = {}", self.iter, new_residual_norm);
             if new_residual_norm <= self.tol {
                 self.converged = true;
                 true
@@ -356,5 +409,47 @@ mod tests {
         let mut x = DVector::zeros(12);
         let converged = solve_amg_with_initial_guess(&a, &b, &mut x, 100, 1e-6, 0.25);
         assert!(converged, "Convenience function with initial guess should converge");
+    }
+
+    #[test]
+    fn amg_customization_methods() {
+        let mut solver = Amg::new(1e-6, 0.25, 100);
+        
+        // Test getters
+        assert_eq!(solver.tolerance(), 1e-6);
+        assert_eq!(solver.theta(), 0.25);
+        assert_eq!(solver.coarse_size(), 100);
+        assert_eq!(solver.pre_smoothing(), 1);
+        assert_eq!(solver.post_smoothing(), 1);
+        assert!(!solver.has_converged());
+        assert_eq!(solver.num_levels(), 0);
+        
+        // Test setters
+        solver.set_tolerance(1e-8);
+        assert_eq!(solver.tolerance(), 1e-8);
+        
+        solver.set_theta(0.5);
+        assert_eq!(solver.theta(), 0.5);
+        
+        solver.set_smoothing(3, 2);
+        assert_eq!(solver.pre_smoothing(), 3);
+        assert_eq!(solver.post_smoothing(), 2);
+    }
+
+    #[test] 
+    fn amg_hierarchy_info() {
+        let a = poisson_1d(20);
+        let b = DVector::from_vec(vec![1.0; 20]);
+        
+        let mut solver = Amg::new(1e-6, 0.25, 100);
+        solver.init(&a, &b, None);
+        
+        // After initialization, hierarchy should be built
+        assert!(solver.num_levels() > 0, "Hierarchy should have levels after init");
+        
+        // Test theta change clears hierarchy
+        solver.set_theta(0.1);
+        solver.init(&a, &b, None);
+        assert!(solver.num_levels() > 0, "Hierarchy should be rebuilt after theta change");
     }
 }

@@ -9,6 +9,9 @@ pub mod amg;
 
 pub use biconjugate_gradient::solve as solve_biconjugate_gradient;
 
+#[cfg(feature = "amg")]
+pub use amg::{Amg, solve_amg, solve_amg_with_initial_guess};
+
 pub use nalgebra_sparse::{CscMatrix, CsrMatrix};
 pub(crate) use nalgebra_sparse::na::{DVector, SimdRealField};
 pub(crate) use rayon::prelude::*;
