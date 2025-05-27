@@ -1,5 +1,4 @@
 // https://edoc.unibas.ch/server/api/core/bitstreams/d56e8bdd-9b91-49ec-a8f5-04eff6db51ca/content
-pub mod cycle;
 pub mod graph;
 pub mod coarsen;
 pub mod interpolate;
@@ -28,42 +27,11 @@ pub fn solve_with_initial_guess<T>(a: CsrMatrix<T>, b: &DVector<T>, x: &mut DVec
 where 
     T: RealField + Copy,
 {
-    use level::*;
-    
-    // Pre-compute initial residual
-    let residual_buffer = DVector::from(&a * &*x - b);
-    let hierarchy = setup(a, theta, 100);
-    
-    // Check if we're already converged
-    let initial_residual_norm = residual_buffer.amax();
-    if initial_residual_norm <= tol {
-        return true;
-    }
-    
-    // Use adaptive tolerance for intermediate iterations
-    let adaptive_tol = tol.max(initial_residual_norm * T::from_f64(1e-3).unwrap());
-    
-    for i in 0..max_iter {
-        let mut residual_buffer = DVector::zeros(b.len());
-        hierarchy.vcycle(0, b, x, &mut residual_buffer, adaptive_tol, 1, 1);
-        
-        // Use the residual buffer that was updated by vcycle
-        let current_residual = residual_buffer;
-        
-        // Check convergence every few iterations to reduce overhead
-        if i % 5 == 4 || i == max_iter - 1 {
-            let residual_norm = current_residual.amax();
-            if residual_norm <= tol {
-                return true;
-            }
-            
-            // Optional: print progress less frequently
-            if i % 20 == 19 {
-                println!("Iteration {}: max residual norm = {}", i + 1, residual_norm);
-            }
-        }
-    }
-    false
+    let mut solver = Amg::new(tol, theta, max_iter);
+    solver.init(&a, b, Some(x));
+    let converged = solver.solve_iterations(&a, b, max_iter);
+    *x = solver.x.clone();
+    converged
 }
 
 pub fn solve<T>(a: CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T, theta: T) -> Option<DVector<T>> 
@@ -76,6 +44,201 @@ where
     } else {
         None
     }
+}
+
+/// AMG (Algebraic Multigrid) solver struct that implements the IterativeSolver trait
+/// for customizable solving with configurable parameters.
+pub struct Amg<T> {
+    pub x: DVector<T>,
+    pub tol: T,
+    pub theta: T,
+    pub max_iter: usize,
+    pub iter: usize,
+    pub converged: bool,
+    pub nu_pre: usize,
+    pub nu_post: usize,
+    pub n_min: usize,
+    hierarchy: Option<level::Hierarchy<T>>,
+    residual_buffer: DVector<T>,
+}
+
+impl<T> Amg<T>
+where
+    T: RealField + Copy,
+{
+    /// Creates a new AMG solver with specified parameters
+    pub fn new(tol: T, theta: T, max_iter: usize) -> Self {
+        Self {
+            x: DVector::zeros(0),
+            tol,
+            theta,
+            max_iter,
+            iter: 0,
+            converged: false,
+            nu_pre: 1,
+            nu_post: 1,
+            n_min: 100,
+            hierarchy: None,
+            residual_buffer: DVector::zeros(0),
+        }
+    }
+
+    /// Creates a new AMG solver with custom smoothing parameters
+    pub fn with_smoothing(tol: T, theta: T, max_iter: usize, nu_pre: usize, nu_post: usize) -> Self {
+        Self {
+            x: DVector::zeros(0),
+            tol,
+            theta,
+            max_iter,
+            iter: 0,
+            converged: false,
+            nu_pre,
+            nu_post,
+            n_min: 100,
+            hierarchy: None,
+            residual_buffer: DVector::zeros(0),
+        }
+    }
+
+    /// Sets the minimum coarse level size
+    pub fn with_coarse_size(mut self, n_min: usize) -> Self {
+        self.n_min = n_min;
+        self
+    }
+
+    /// Sets the pre and post smoothing iterations
+    pub fn set_smoothing(&mut self, nu_pre: usize, nu_post: usize) {
+        self.nu_pre = nu_pre;
+        self.nu_post = nu_post;
+    }
+}
+
+impl<T> IterativeSolver<CsrMatrix<T>, DVector<T>, T> for Amg<T>
+where
+    T: RealField + Copy,
+{
+    fn init(&mut self, a: &CsrMatrix<T>, _b: &DVector<T>, x0: Option<&DVector<T>>) {
+        let n = a.nrows();
+        self.x = match x0 {
+            Some(x0) => x0.clone(),
+            None => DVector::<T>::zeros(n),
+        };
+        self.residual_buffer = DVector::zeros(n);
+        self.iter = 0;
+        self.converged = false;
+        
+        // Build the AMG hierarchy
+        self.hierarchy = Some(level::setup(a.clone(), self.theta, self.n_min));
+    }
+
+    fn step(&mut self, a: &CsrMatrix<T>, b: &DVector<T>) -> bool {
+        if let Some(ref hierarchy) = self.hierarchy {
+            // Check if we're already converged
+            let current_residual = a * &self.x - b;
+            let residual_norm = current_residual.amax();
+            
+            if residual_norm <= self.tol {
+                self.converged = true;
+                return true;
+            }
+            
+            // Use adaptive tolerance for intermediate iterations
+            let adaptive_tol = self.tol.max(residual_norm * T::from_f64(1e-3).unwrap());
+            
+            // Perform one V-cycle
+            hierarchy.vcycle(
+                0, 
+                b, 
+                &mut self.x, 
+                &mut self.residual_buffer, 
+                adaptive_tol, 
+                self.nu_pre, 
+                self.nu_post
+            );
+            
+            self.iter += 1;
+            
+            // Check convergence after the V-cycle
+            let new_residual = a * &self.x - b;
+            let new_residual_norm = new_residual.amax();
+            
+            if new_residual_norm <= self.tol {
+                self.converged = true;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    fn reset(&mut self) {
+        self.x.fill(T::zero());
+        self.residual_buffer.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+        // Keep hierarchy for reuse
+    }
+
+    fn hard_reset(&mut self) {
+        self.x = DVector::<T>::zeros(0);
+        self.residual_buffer = DVector::<T>::zeros(0);
+        self.iter = 0;
+        self.converged = false;
+        self.hierarchy = None;
+    }
+
+    fn soft_reset(&mut self) {
+        self.x.fill(T::zero());
+        self.residual_buffer.fill(T::zero());
+        self.iter = 0;
+        self.converged = false;
+        // Keep hierarchy for reuse
+    }
+
+    fn solution(&self) -> &DVector<T> {
+        &self.x
+    }
+
+    fn iterations(&self) -> usize {
+        self.iter
+    }
+}
+
+/// Convenience function to create an AMG solver with default parameters
+/// and solve the linear system Ax = b.
+pub fn solve_amg<T>(a: &CsrMatrix<T>, b: &DVector<T>, max_iter: usize, tol: T, theta: T) -> Option<DVector<T>> 
+where 
+    T: RealField + Copy,
+{
+    let mut solver = Amg::new(tol, theta, max_iter);
+    solver.init(a, b, None);
+    if solver.solve_iterations(a, b, max_iter) {
+        Some(solver.x.clone())
+    } else {
+        None
+    }
+}
+
+/// Convenience function to create an AMG solver with default parameters
+/// and solve with an initial guess.
+pub fn solve_amg_with_initial_guess<T>(
+    a: &CsrMatrix<T>, 
+    b: &DVector<T>, 
+    x: &mut DVector<T>, 
+    max_iter: usize, 
+    tol: T, 
+    theta: T
+) -> bool
+where 
+    T: RealField + Copy,
+{
+    let mut solver = Amg::new(tol, theta, max_iter);
+    solver.init(a, b, Some(x));
+    let converged = solver.solve_iterations(a, b, max_iter);
+    *x = solver.x.clone();
+    converged
 }
 
 #[cfg(test)]
@@ -144,5 +307,54 @@ mod tests {
                 assert_relative_eq!(row.values()[0], 1.0);
             }
         }
+    }
+
+    #[test]
+    fn amg_solver_struct() {
+        let a = poisson_1d(20);
+        let b = DVector::from_vec(vec![1.0; 20]);
+        
+        // Test with struct-based solver
+        let mut solver = Amg::new(1e-6, 0.25, 100);
+        solver.init(&a, &b, None);
+        
+        let converged = solver.solve_iterations(&a, &b, 100);
+        assert!(converged, "AMG solver should converge");
+        assert!(solver.iterations() > 0, "Should perform at least one iteration");
+        
+        // Verify solution quality
+        let residual = &a * solver.solution() - &b;
+        let residual_norm = residual.amax();
+        assert!(residual_norm <= 1e-6, "Residual should be below tolerance");
+    }
+
+    #[test]
+    fn amg_solver_with_custom_smoothing() {
+        let a = poisson_1d(16);
+        let b = DVector::from_vec(vec![1.0; 16]);
+        
+        // Test with custom smoothing parameters
+        let mut solver = Amg::with_smoothing(1e-6, 0.25, 50, 2, 2);
+        assert_eq!(solver.nu_pre, 2);
+        assert_eq!(solver.nu_post, 2);
+        
+        solver.init(&a, &b, None);
+        let converged = solver.solve_iterations(&a, &b, 50);
+        assert!(converged, "AMG solver with custom smoothing should converge");
+    }
+
+    #[test]
+    fn amg_convenience_functions() {
+        let a = poisson_1d(12);
+        let b = DVector::from_vec(vec![1.0; 12]);
+        
+        // Test convenience function
+        let solution = solve_amg(&a, &b, 100, 1e-6, 0.25);
+        assert!(solution.is_some(), "Convenience function should return a solution");
+        
+        // Test with initial guess
+        let mut x = DVector::zeros(12);
+        let converged = solve_amg_with_initial_guess(&a, &b, &mut x, 100, 1e-6, 0.25);
+        assert!(converged, "Convenience function with initial guess should converge");
     }
 }
