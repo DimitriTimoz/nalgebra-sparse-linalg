@@ -99,7 +99,7 @@ where
             None => DVector::<T>::zeros(n),
         };
         self.r = b - &a.mul_vec(&self.x);
-        self.r_hat = self.r.clone(); // In practice, r_hat should be a fixed or random vector
+        self.r_hat = self.r.clone();
         self.p = self.r.clone();
         self.v = DVector::<T>::zeros(n);
         self.iter = 0;
@@ -118,7 +118,7 @@ where
         let alpha = r_dot / self.r_hat.dot(&self.v);
         self.x.axpy(alpha, &self.p, T::one());
         let s = &self.r - &self.v * alpha;
-        if s.magnitude() <= self.tol {
+        if s.max() <= self.tol {
             self.r = s;
             self.converged = true;
             return true;
@@ -127,7 +127,7 @@ where
         let omega = t.dot(&s) / t.dot(&t);
         self.x.axpy(omega, &s, T::one());
         let new_r = &s - &t * omega;
-        if new_r.magnitude() <= self.tol {
+        if new_r.max() <= self.tol {
             self.r = new_r;
             self.converged = true;
             return true;

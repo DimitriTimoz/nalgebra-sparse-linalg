@@ -14,9 +14,11 @@ impl AlternatingRange {
             current: 0,
         }
     }
+
     fn is_reversed(&self) -> bool {
         self.reversed
     }
+    
     fn alternate(&mut self) {
         self.reversed = !self.reversed;
         self.current = 0;
