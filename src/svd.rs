@@ -40,21 +40,38 @@ impl<T: Copy + ComplexField + Float> TruncatedSVD<T> {
                 singular_values: DVector::zeros(0),
             };
         }
-        
+
+        let nrows = matrix.nrows();
+        let ncols = matrix.ncols();
+        let k = k.min(nrows.min(ncols));
+
+        // For small matrices compute the exact SVD on a dense representation
+        if nrows <= 50 && ncols <= 50 {
+            use nalgebra_sparse::convert::serial::convert_csr_dense;
+            let dense = convert_csr_dense(matrix);
+            let svd = SVD::new(dense, true, false);
+            let u_full = svd.u.unwrap();
+            let singular_values = svd.singular_values;
+            let k_actual = k.min(u_full.ncols()).min(singular_values.len());
+            let u = u_full.view_range(.., ..k_actual).into_owned();
+            let singular_values = singular_values.view_range(..k_actual, ..).into_owned();
+            return Self { u, singular_values };
+        }
+
         // Step 1: Range finding get an orthonormal basis Q for the range of A
         let q = Self::range_random(matrix, k);
 
         // Step 2: Project A onto the range of Q to get a smaller matrix B
         let b = matrix.transpose() * &q;
-        
+
         // Step 3: Compute the SVD of B^T (which is q^T * A)
         let svd = SVD::new(b.transpose(), true, false);
         let u_small = svd.u.unwrap();
         let singular_values = svd.singular_values;
-        
+
         // Step 4: The left singular vectors of A are Q * U_small
         let u = &q * &u_small;
-        
+
         // Take only the first k columns (in case we got more)
         let k_actual = k.min(u.ncols()).min(singular_values.len());
         let u = u.view_range(.., ..k_actual).into_owned();
