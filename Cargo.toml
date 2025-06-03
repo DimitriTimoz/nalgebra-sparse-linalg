@@ -16,6 +16,7 @@ log = "0.4.27"
 nalgebra-sparse = "0.10"
 rayon = "1.10"
 rand = { version = "0.9" }
+rand_distr = "0.5.1"
 
 [dev-dependencies]
 criterion = { version = "0.6" }
