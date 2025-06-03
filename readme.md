@@ -70,7 +70,7 @@ use nalgebra_sparse::CsrMatrix;
 use nalgebra_sparse_linalg::svd::TruncatedSVD;
 
 // Create or load your data matrix
-let matrix = CsrMatrix::from(/* your dense matrix */);
+let matrix = CsrMatrix::from(/* your sparse matrix */);
 
 // Compute top 50 singular vectors and values
 let svd = TruncatedSVD::new(&matrix, 50);
@@ -113,7 +113,7 @@ use nalgebra_sparse_linalg::iteratives::relaxation::solve;
 
 let a = CsrMatrix::identity(3);
 let b = DVector::from_vec(vec![1.0, 2.0, 3.0]);
-let omega = 1.2; // Relaxation parameter
+let omega = 0.8; // Relaxation parameter
 let result = solve(&a, &b, 100, omega, 1e-10);
 assert!(result.is_some());
 ```
