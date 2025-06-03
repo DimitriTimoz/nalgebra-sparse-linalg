@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "nalgebra-sparse-linalg"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "approx",
  "criterion",

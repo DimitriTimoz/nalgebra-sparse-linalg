@@ -3,7 +3,7 @@ name = "nalgebra-sparse-linalg"
 description = "Sparse linear algebra library for Rust using nalgebra including linear solvers and SVD."
 authors = ["Dimitri Timoz <dimitri.timoz@protonmail.com>"]
 license = "MIT"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 
 [features]
