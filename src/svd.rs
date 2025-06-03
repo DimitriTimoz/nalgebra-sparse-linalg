@@ -1,5 +1,6 @@
 use nalgebra_sparse::{na::{linalg::{SVD, QR}, ComplexField, DMatrix, DVector}, CsrMatrix};
 use rand_distr::{num_traits::Float, Distribution, Normal};
+use rand::{SeedableRng, rngs::StdRng};
 
 pub struct TruncatedSVD<T: ComplexField> {
     pub u: DMatrix<T>,
@@ -13,19 +14,40 @@ impl<T: Copy + ComplexField + Float> TruncatedSVD<T> {
         // Ensure k doesn't exceed matrix dimensions
         let k = k.min(a.nrows()).min(a.ncols());
         
-        // Create a random matrix with k columns for range finding
-        let mut rng = rand::rng();
-        let omega = DMatrix::from_fn(a.ncols(), k, |_, _| {
+        // Use deterministic seeding for reproducible results in tests
+        let mut rng = StdRng::seed_from_u64(42);
+        
+        // Add oversampling for better accuracy (typically k + 5 to k + 10)
+        let oversampled_k = (k + 5).min(a.ncols());
+        
+        // Create a random matrix with oversampled_k columns for range finding
+        let omega = DMatrix::from_fn(a.ncols(), oversampled_k, |_, _| {
             T::from(Normal::new(0.0, 1.0).unwrap().sample(&mut rng)).unwrap()
         });
-        let y = a * &omega;
+        
+        // Compute Y = A * Omega
+        let mut y = a * &omega;
+        
+        // Power iteration for better range approximation (especially for matrices with small gaps)
+        let power_iterations = 2; // Usually 1-3 iterations are sufficient
+        for _ in 0..power_iterations {
+            // Y = A^T * Y
+            y = a.transpose() * &y;
+            // Y = A * Y  
+            y = a * &y;
+        }
 
+        // Compute QR decomposition to get orthonormal basis
         let qr = QR::new(y);
-        qr.q()
+        let q_full = qr.q();
+        
+        // Return only the first k columns
+        q_full.view_range(.., ..k).into_owned()
     }
 
     /// Computes the truncated singular value decomposition of the given matrix.
     /// This uses a randomized algorithm for efficient computation of the top k singular vectors.
+    /// For small matrices or when k is close to the matrix dimensions, falls back to full SVD.
     /// 
     /// # Arguments
     /// * `matrix` - The sparse matrix to decompose
@@ -41,7 +63,32 @@ impl<T: Copy + ComplexField + Float> TruncatedSVD<T> {
             };
         }
         
-        // Step 1: Range finding get an orthonormal basis Q for the range of A
+        let m = matrix.nrows();
+        let n = matrix.ncols();
+        let min_dim = m.min(n);
+        
+        // For small matrices or when k is close to min(m,n), use full SVD for better accuracy
+        if min_dim <= 100 || k > min_dim * 3 / 4 {
+            // Convert sparse matrix to dense for full SVD
+            let mut dense_matrix = DMatrix::<T>::zeros(m, n);
+            for (row_idx, row) in matrix.row_iter().enumerate() {
+                for (&col_idx, &value) in row.col_indices().iter().zip(row.values().iter()) {
+                    dense_matrix[(row_idx, col_idx)] = value;
+                }
+            }
+            
+            let full_svd = SVD::new(dense_matrix, true, false);
+            let u_full = full_svd.u.unwrap();
+            let singular_values_full = full_svd.singular_values;
+            
+            let k_actual = k.min(u_full.ncols()).min(singular_values_full.len());
+            let u = u_full.columns(0, k_actual).into_owned();
+            let singular_values = singular_values_full.rows(0, k_actual).into_owned();
+            
+            return Self { u, singular_values };
+        }
+        
+        // Step 1: Range finding - get an orthonormal basis Q for the range of A
         let q = Self::range_random(matrix, k);
 
         // Step 2: Project A onto the range of Q to get a smaller matrix B
@@ -57,8 +104,8 @@ impl<T: Copy + ComplexField + Float> TruncatedSVD<T> {
         
         // Take only the first k columns (in case we got more)
         let k_actual = k.min(u.ncols()).min(singular_values.len());
-        let u = u.view_range(.., ..k_actual).into_owned();
-        let singular_values = singular_values.view_range(..k_actual, ..).into_owned();
+        let u = u.columns(0, k_actual).into_owned();
+        let singular_values = singular_values.rows(0, k_actual).into_owned();
 
         Self {
             u,

@@ -26,6 +26,7 @@ Perfect for scientific computing, machine learning, data analysis, and numerical
 - **Successive Over-Relaxation (SOR)** - Accelerated convergence with relaxation parameter
 - **Conjugate Gradient (CG)** - Optimal for symmetric positive-definite matrices
 - **BiConjugate Gradient (BiCG)** - General solver for non-symmetric systems
+- **Algebraic Multigrid (AMG)** - Advanced multigrid solver for large-scale problems
 
 ### Matrix Decompositions
 - **Truncated SVD** - Randomized algorithm for efficient singular value decomposition
@@ -46,6 +47,14 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 nalgebra-sparse-linalg = "0.1"
+nalgebra-sparse = "0.9"
+```
+
+For advanced multigrid methods, enable the AMG feature:
+
+```toml
+[dependencies]
+nalgebra-sparse-linalg = { version = "0.1", features = ["amg"] }
 nalgebra-sparse = "0.9"
 ```
 
@@ -142,6 +151,49 @@ let result = solve(&a, &b, 100, 1e-10);
 assert!(result.is_some());
 ```
 
+#### Algebraic Multigrid (AMG)
+*Note: Requires the `amg` feature flag*
+
+```rust
+use nalgebra_sparse::{na::DVector, CsrMatrix};
+use nalgebra_sparse_linalg::iteratives::amg::solve_amg;
+
+// AMG is particularly effective for problems arising from PDEs
+// Create a sparse matrix (e.g., from finite difference discretization)
+let a = /* your sparse matrix from PDE discretization */;
+let b = DVector::from_vec(vec![1.0; a.nrows()]);
+
+// AMG parameters: max_iterations, tolerance, strength_threshold
+let result = solve_amg(&a, &b, 100, 1e-10, 0.25);
+assert!(result.is_some());
+```
+
+#### Advanced AMG Usage
+*Note: Requires the `amg` feature flag*
+
+```rust
+use nalgebra_sparse::{na::DVector, CsrMatrix};
+use nalgebra_sparse_linalg::iteratives::amg::Amg;
+use nalgebra_sparse_linalg::iteratives::IterativeSolver;
+
+// Create AMG solver with custom parameters
+let mut amg_solver = Amg::new(
+    1e-10,  // tolerance
+    0.25,   // strength threshold
+    100     // max iterations
+);
+
+// Initialize with matrix and RHS
+amg_solver.init(&a, &b, None);
+
+// Solve iteratively
+let converged = amg_solver.solve_iterations(&a, &b, 100);
+if converged {
+    let solution = amg_solver.solution().clone();
+    println!("Converged in {} iterations", amg_solver.iterations());
+}
+```
+
 ### Matrix Decompositions
 
 #### Truncated SVD for Large Matrices
@@ -185,6 +237,7 @@ let svd = TruncatedSVD::new(&sparse_data, n_components);
 - Computational fluid dynamics
 - Structural analysis
 - Physics simulations
+- Partial differential equations (PDEs) - AMG excels at discretized PDEs
 
 ### 🤖 Machine Learning & Data Science
 - Large-scale linear regression
@@ -198,6 +251,7 @@ let svd = TruncatedSVD::new(&sparse_data, n_components);
 - Optimization problems
 - Signal processing
 - Graph algorithms
+- Multigrid methods - AMG for hierarchical problem solving
 
 ## Performance
 
@@ -206,6 +260,12 @@ This library is optimized for:
 - **Memory efficiency** - Minimal overhead beyond input data
 - **Numerical stability** - Robust algorithms with proven convergence
 - **Parallel computation** - Multi-threaded operations where beneficial
+
+### AMG Performance Characteristics
+- **Optimal complexity** - O(n) for many PDE problems
+- **Scalable** - Maintains efficiency as problem size increases
+- **Memory efficient** - Hierarchical structure reduces memory requirements
+- **Grid-independent convergence** - Performance doesn't degrade with mesh refinement
 
 ## Algorithm Selection Guide
 
@@ -216,6 +276,7 @@ This library is optimized for:
 | Diagonally dominant | Jacobi or Gauss-Seidel | Simple and robust |
 | Large-scale PCA/SVD | Truncated SVD | Memory efficient |
 | Ill-conditioned systems | Relaxation methods | Adjustable convergence |
+| DE discretizations | Algebraic Multigrid (AMG) | Optimal for grid-based problems |
 
 ## Documentation
 
